@@ -13,8 +13,8 @@ import static ssw.mj.Errors.Message.*;
 import static ssw.mj.Token.Kind.*;
 
 public final class ScannerImpl extends Scanner {
-
-	private final Map<String, Kind> keywordMap;
+	// stores keyword lookup for readName()
+	private static final Map<String, Kind> keywordMap = new HashMap<>();
 	private final int LINESTART = 1; // used for init
 	private final int COLSTART = 0;// used for init and resetting
 
@@ -23,7 +23,6 @@ public final class ScannerImpl extends Scanner {
 		line = LINESTART; // init lines, col
 		col = COLSTART;
 		nextCh(); // skip first character
-		keywordMap = new HashMap<>(); // stores keyword lookup for readName()
 		defineKeywordList(); // stores the keyword in the HashMap
 	}
 
@@ -322,14 +321,20 @@ public final class ScannerImpl extends Scanner {
 				error(t, UNDEFINED_ESCAPE, ch);
 			} else { // here we know, we got a corr. escape seq. -> assign corr
 						// one
-				if (ch == 'r')
+				switch (ch) {
+				case 'r':
 					t.val = '\r';
-				if (ch == 'n')
+					break;
+				case 'n':
 					t.val = '\n';
-				if (ch == '\'')
+					break;
+				case '\'':
 					t.val = '\'';
-				if (ch == '\\')
+					break;
+				case '\\':
 					t.val = '\\';
+					break;
+				}
 			}
 			nextCh(); // get quote - its hopefully there
 			if (ch != '\'') {
@@ -385,7 +390,7 @@ public final class ScannerImpl extends Scanner {
 		nameReader.append(ch); // append char from switchCase in next() method
 		nextCh();
 		// read until no valid symbol is read anymore
-		while (Character.isLetter(ch) || Character.isDigit(ch) || ch == '_') {
+		while (isLetter(ch) || Character.isDigit(ch) || ch == '_') {
 			nameReader.append(ch);
 			nextCh();
 		}
@@ -397,6 +402,16 @@ public final class ScannerImpl extends Scanner {
 			t.kind = ident;
 			t.str = tempStr; // sets ident string
 		}
+	}
+
+	/**
+	 * Checks if given char is valid letter
+	 * 
+	 * @param ch
+	 * @return
+	 */
+	private boolean isLetter(char ch) {
+		return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
 	}
 
 	/**
