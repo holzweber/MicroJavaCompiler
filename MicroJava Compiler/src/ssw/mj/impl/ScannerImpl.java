@@ -18,12 +18,27 @@ public final class ScannerImpl extends Scanner {
 	private final int LINESTART = 1; // used for init
 	private final int COLSTART = 0;// used for init and resetting
 
+	static {
+		keywordMap.put("break", break_);
+		keywordMap.put("class", class_);
+		keywordMap.put("else", else_);
+		keywordMap.put("final", final_);
+		keywordMap.put("if", if_);
+		keywordMap.put("new", new_);
+		keywordMap.put("print", print);
+		keywordMap.put("program", program);
+		keywordMap.put("read", read);
+		keywordMap.put("return", return_);
+		keywordMap.put("void", void_);
+		keywordMap.put("while", while_);
+		keywordMap.put("loop", loop_);
+	}
+
 	public ScannerImpl(Reader r) {
 		super(r);
 		line = LINESTART; // init lines, col
 		col = COLSTART;
 		nextCh(); // skip first character
-		defineKeywordList(); // stores the keyword in the HashMap
 	}
 
 	/**
@@ -434,22 +449,4 @@ public final class ScannerImpl extends Scanner {
 		}
 	}
 
-	/**
-	 * Fills HashMap List
-	 */
-	private void defineKeywordList() {
-		keywordMap.put("break", break_);
-		keywordMap.put("class", class_);
-		keywordMap.put("else", else_);
-		keywordMap.put("final", final_);
-		keywordMap.put("if", if_);
-		keywordMap.put("new", new_);
-		keywordMap.put("print", print);
-		keywordMap.put("program", program);
-		keywordMap.put("read", read);
-		keywordMap.put("return", return_);
-		keywordMap.put("void", void_);
-		keywordMap.put("while", while_);
-		keywordMap.put("loop", loop_);
-	}
 }

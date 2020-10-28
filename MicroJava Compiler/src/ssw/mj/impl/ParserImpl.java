@@ -16,11 +16,25 @@ public final class ParserImpl extends Parser {
 	 * created, if we would need more than one check per First comparison of
 	 * NTS.
 	 */
-	private final EnumSet<Kind> firstProgram, firstConstDecl, firstVarDecl,
-			firstClassDecl, firstMethodDecl, firstFormPars, firstType,
-			firstBlock, firstStatement, firstAssignop, firstActPars,
-			firstCondition, firstCondTerm, firstCondFact, firstRelop, firstExpr,
-			firstTerm, firstFactor, firstDesignator, firstAddop, firstMulop;
+	private static final EnumSet<Kind> firstMethodDecl, firstStatement,
+			firstAssignop, firstRelop, firstExpr, firstAddop, firstMulop,
+			declProgram;
+
+	/**
+	 * static constructor, for initializing the enumsets above
+	 */
+	static {
+		firstMethodDecl = EnumSet.of(ident, void_);
+		firstStatement = EnumSet.of(ident, if_, loop_, while_, break_, return_,
+				read, print, lbrace, semicolon);
+		firstAssignop = EnumSet.of(assign, plusas, minusas, timesas, slashas,
+				remas);
+		firstRelop = EnumSet.of(eql, neq, lss, leq, gtr, geq);
+		firstExpr = EnumSet.of(minus, ident, number, charConst, new_, lpar);
+		firstAddop = EnumSet.of(plus, minus);
+		firstMulop = EnumSet.of(times, slash, rem);
+		declProgram = EnumSet.of(final_, class_, ident);
+	}
 
 	/**
 	 * Constructor, which sets the used Scanner and defines the EnumSet used for
@@ -31,30 +45,6 @@ public final class ParserImpl extends Parser {
 	 */
 	public ParserImpl(Scanner scanner) {
 		super(scanner); // initalize scanner
-		firstProgram = EnumSet.of(program);
-		firstConstDecl = EnumSet.of(final_);
-		firstVarDecl = EnumSet.of(ident);
-		firstClassDecl = EnumSet.of(class_);
-		firstMethodDecl = EnumSet.of(ident, void_);
-		firstFormPars = EnumSet.of(ident);
-		firstType = EnumSet.of(ident);
-		firstBlock = EnumSet.of(lbrace);
-		firstStatement = EnumSet.of(ident, if_, loop_, while_, break_, return_,
-				read, print, lbrace, semicolon);
-		firstAssignop = EnumSet.of(assign, plusas, minusas, timesas, slashas,
-				remas);
-		firstActPars = EnumSet.of(lpar);
-		firstCondition = EnumSet.of(minus, ident, number, charConst, new_,
-				lpar);
-		firstCondTerm = EnumSet.of(minus, ident, number, charConst, new_, lpar);
-		firstCondFact = EnumSet.of(minus, ident, number, charConst, new_, lpar);
-		firstRelop = EnumSet.of(eql, neq, lss, leq, gtr, geq);
-		firstExpr = EnumSet.of(minus, ident, number, charConst, new_, lpar);
-		firstTerm = EnumSet.of(ident, number, charConst, new_, lpar);
-		firstFactor = EnumSet.of(ident, number, charConst, new_, lpar);
-		firstDesignator = EnumSet.of(ident);
-		firstAddop = EnumSet.of(plus, minus);
-		firstMulop = EnumSet.of(times, slash, rem);
 	}
 
 	/**
@@ -96,15 +86,20 @@ public final class ParserImpl extends Parser {
 		check(program);
 		check(ident);
 		// used endless loop with if -else in order to dont double check
-		for (;;) {
-			if (sym == final_) {
+		while (declProgram.contains(sym)) {
+			switch (sym) {
+			case final_:
 				constdecl();
-			} else if (sym == ident) {
+				break;
+			case ident:
 				vardecl();
-			} else if (sym == class_) {
+				break;
+			case class_:
 				classdecl();
-			} else {
-				break; // break out of loop
+				break;
+			default:// dont need default, because we check enumset, just for
+					// supress warning
+				break;
 			}
 		}
 		check(lbrace);
