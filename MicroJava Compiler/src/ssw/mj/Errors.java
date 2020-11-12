@@ -28,7 +28,7 @@ public class Errors {
         DESIGN_FOLLOW("assignment, method call, increment (++) or decrement (--) expected"),
         INVALID_DECL("invalid global declaration"),
         INVALID_FACT("invalid start of factor: identifier, number, character constant, new or ( expected"),
-        INVALID_STAT("invalid start of statement: identifier, if, while, do, break, return, read, print, '{' or ; expected"),
+        INVALID_STAT("invalid start of statement: identifier, if, while, loop, do, break, return, read, print, '{' or ; expected"),
         METH_DECL("type name or void expected"),
         MUL_OP("multiplicative operator (*, /, %) expected"),
         REL_OP("relational operator (==, !=, >, >=, <, <=) expected"),

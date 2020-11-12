@@ -17,7 +17,7 @@ public class Operand {
      * Possible operands.
      */
     public enum Kind {
-        Con, Local, Static, Stack, Fld, Elem, Meth, Cond
+        Con, Local, Static, Stack, Fld, Elem, Meth, Cond, None
     }
 
     /**
@@ -76,6 +76,7 @@ public class Operand {
                 obj = o;
                 break;
             default:
+                kind = Kind.None;
                 parser.error(NO_OPERAND);
         }
     }

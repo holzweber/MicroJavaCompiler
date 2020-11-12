@@ -584,9 +584,8 @@ public class ScannerTest extends CompilerTestCaseSupport {
 
 	@Test
 	public void simpleMultiLineComment() {
-		initScanner(
-				" {" + LF + "  /* Simple " + LF + "     / multi * line " + LF //
-						+ "     comment. */ " + LF + " } ");
+		initScanner(" {" + LF + "  /* Simple " + LF + "     / multi * line " + LF //
+				+ "     comment. */ " + LF + " } ");
 
 		expectToken(lbrace, 1, 2);
 		expectToken(rbrace, 5, 2);
@@ -608,8 +607,7 @@ public class ScannerTest extends CompilerTestCaseSupport {
 
 	@Test
 	public void nestedSingleLineComment() {
-		initScanner(
-				" {/* This / is * a /* nested  /* single line */ comment. */*/} ");
+		initScanner(" {/* This / is * a /* nested  /* single line */ comment. */*/} ");
 
 		expectToken(lbrace, 1, 2);
 		expectToken(rbrace, 1, 62);
@@ -620,11 +618,9 @@ public class ScannerTest extends CompilerTestCaseSupport {
 
 	@Test
 	public void nestedMultiLineComment() {
-		initScanner(
-				" {" + LF + "  /* This / is * a " + LF + "   /* nested  " + LF //
-						+ "    /* multi line */" + LF + "    comment. " + LF
-						+ "   */" + LF //
-						+ "  */ " + LF + " } ");
+		initScanner(" {" + LF + "  /* This / is * a " + LF + "   /* nested  " + LF //
+				+ "    /* multi line */" + LF + "    comment. " + LF + "   */" + LF //
+				+ "  */ " + LF + " } ");
 
 		expectToken(lbrace, 1, 2);
 		expectToken(rbrace, 8, 2);
@@ -635,11 +631,9 @@ public class ScannerTest extends CompilerTestCaseSupport {
 
 	@Test
 	public void nestedMultiLineComment2() {
-		initScanner(
-				" {" + LF + "  /* This / is * a " + LF + "   /* nested  " + LF //
-						+ "    /* multi /*/* double nestet */*/ line */" + LF
-						+ "    comment. " + LF + "   */" + LF //
-						+ "  */ " + LF + " } ");
+		initScanner(" {" + LF + "  /* This / is * a " + LF + "   /* nested  " + LF //
+				+ "    /* multi /*/* double nestet */*/ line */" + LF + "    comment. " + LF + "   */" + LF //
+				+ "  */ " + LF + " } ");
 
 		expectToken(lbrace, 1, 2);
 		expectToken(rbrace, 8, 2);
@@ -650,8 +644,7 @@ public class ScannerTest extends CompilerTestCaseSupport {
 
 	@Test
 	public void commentAtEnd1() {
-		initScanner(
-				" {/* This / is * a /* nested  /* single line */ comment. */*/ ");
+		initScanner(" {/* This / is * a /* nested  /* single line */ comment. */*/ ");
 
 		expectToken(lbrace, 1, 2);
 		expectToken(eof, 1, 62);
@@ -661,8 +654,7 @@ public class ScannerTest extends CompilerTestCaseSupport {
 
 	@Test
 	public void commentAtEnd2() {
-		initScanner(
-				" {/* This / is * a /* nested  /* single line */ comment. */*/");
+		initScanner(" {/* This / is * a /* nested  /* single line */ comment. */*/");
 
 		expectToken(lbrace, 1, 2);
 		expectToken(eof, 1, 61);
@@ -734,10 +726,8 @@ public class ScannerTest extends CompilerTestCaseSupport {
 	@Test
 	public void allTokens() {
 		initScanner("anIdentifier 123 'c'" + LF //
-				+ "+ - * / % == != < <= > >= && || = += -= *= /= %= ++ -- ; , . ( ) [ ] { }"
-				+ LF //
-				+ "break class else final if new print program read return void while loop :"
-				+ LF);
+				+ "+ - * / % == != < <= > >= && || = += -= *= /= %= ++ -- ; , . ( ) [ ] { }" + LF //
+				+ "break class else final if new print program read return void while loop :" + LF);
 
 		expectToken(ident, 1, 1, "anIdentifier");
 		expectToken(number, 1, 14, 123);

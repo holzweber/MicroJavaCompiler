@@ -1203,7 +1203,7 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 	}
 
 	@Test
-	public void testNestedLabeledLoopsWithBreak() {
+	public void testNestedLabeledLoopsWithNormalBreak() {
 		init("program Test {" + LF +
 				"  void main () int i; int j; int k; {" + LF +
 				"    i = 0;" + LF +
@@ -1227,14 +1227,41 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 		expectSymTab("    Local Variable 0: int i");
 		expectSymTab("    Local Variable 1: int j");
 		expectSymTab("    Local Variable 2: int k");
-		expectSymTab("    Label Outer");
-		expectSymTab("    Label Middle");
-		expectSymTab("    Label Inner");
+		// After parsing the whole program, the labels do not appear in the sym tab since they are only contained temporarily while working on the loop
 		parseAndVerify();
 	}
 
 	@Test
-	public void testNestedLabeledLoopsWithLabeledBreak() {
+	public void testNestedLabeledLoopsWithLabeledBreak1() {
+		init("program Test {" + LF +
+				"  void main () int i; int j; int k; {" + LF +
+				"    i = 0;" + LF +
+				"    loop Outer: while (i < 10) {" + LF +
+				"	   j = 0;" + LF +
+				"      loop Middle: while (j < 10) {" + LF +
+				"        k = 0;" + LF +
+				"        loop Inner: while (k < 10) {" + LF +
+				"          k++;" + LF +
+				"          break Inner;" + LF +
+				"        }" + LF +
+				"	     j++;" + LF +
+				"	   }" + LF +
+				"	   i++;" + LF +
+				"    }" + LF +
+				"  }" + LF +
+				"}");
+		expectSymTabUniverse();
+		expectSymTab("Program Test:");
+		expectSymTab("  Method: void main(0)");
+		expectSymTab("    Local Variable 0: int i");
+		expectSymTab("    Local Variable 1: int j");
+		expectSymTab("    Local Variable 2: int k");
+		// After parsing the whole program, the labels do not appear in the sym tab since they are only contained temporarily while working on the loop
+		parseAndVerify();
+	}
+
+	@Test
+	public void testNestedLabeledLoopsWithLabeledBreak2() {
 		init("program Test {" + LF +
 				"  void main () int i; int j; int k; {" + LF +
 				"    i = 0;" + LF +
@@ -1258,14 +1285,12 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 		expectSymTab("    Local Variable 0: int i");
 		expectSymTab("    Local Variable 1: int j");
 		expectSymTab("    Local Variable 2: int k");
-		expectSymTab("    Label Outer");
-		expectSymTab("    Label Middle");
-		expectSymTab("    Label Inner");
+		// After parsing the whole program, the labels do not appear in the sym tab since they are only contained temporarily while working on the loop
 		parseAndVerify();
 	}
 
 	@Test
-	public void testAlreadyDeclaredLoopName() {
+	public void testLoopNameWorkingShadowing1() {
 		init("program Test {" + LF +
 				"  void main () int i; int j; int k; {" + LF +
 				"    i = 0;" + LF +
@@ -1273,6 +1298,7 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 				"	   j = 0;" + LF +
 				"      while (j < 10) {" + LF +
 				"        k = 0;" + LF +
+				"        /* shadowing is allowed */" + LF +
 				"        loop LoopName: while (k < 10) {" + LF +
 				"          k++;" + LF +
 				"        }" + LF +
@@ -1282,15 +1308,15 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 				"    }" + LF +
 				"  }" + LF +
 				"}");
-		expectError(8, 22, DECL_NAME, "LoopName");
 		parseAndVerify();
 	}
 
 	@Test
-	public void testAlreadyDeclaredLoopName2() {
+	public void testLoopNameWorkingShadowing2() {
 		init("program Test {" + LF +
 				"  void main () int i; int j; int k; int LoopName; {" + LF +
 				"    i = 0;" + LF +
+				"    /* shadowing is allowed */" + LF +
 				"    loop LoopName: while (i < 10) {" + LF +
 				"	   j = 0;" + LF +
 				"      while (j < 10) {" + LF +
@@ -1304,7 +1330,6 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 				"    }" + LF +
 				"  }" + LF +
 				"}");
-		expectError(4, 18, DECL_NAME, "LoopName");
 		parseAndVerify();
 	}
 
@@ -1319,6 +1344,7 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 				"        k = 0;" + LF +
 				"        while (k < 10) {" + LF +
 				"          k++;" + LF +
+				"          /* Loop name will not be found */" + LF +
 				"          break LoopName;" + LF +
 				"        }" + LF +
 				"	     j++;" + LF +
@@ -1327,7 +1353,7 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 				"    }" + LF +
 				"  }" + LF +
 				"}");
-		expectError(10, 25, NOT_FOUND, "LoopName");
+		expectError(11, 25, NOT_FOUND, "LoopName");
 		parseAndVerify();
 	}
 
@@ -1342,6 +1368,46 @@ public class SymbolTableTest extends CompilerTestCaseSupport {
 				"  }" + LF +
 				"}");
 		expectError(5, 14, NO_LABEL);
+		parseAndVerify();
+	}
+
+	@Test
+	public void testSameLoopNameInIndependentLoops() {
+		init("program Test {" + LF +
+				"  void main () int i; int j; int k; {" + LF +
+				"    i = 0;" + LF +
+				"    loop LoopName: while (i < 10) {" + LF +
+				"	   i++;" + LF +
+				"    }" + LF +
+				"    loop LoopName: while (i < 20) {" + LF +
+				"	   i++;" + LF +
+				"    }" + LF +
+				"  }" + LF +
+				"}");		expectSymTabUniverse();
+		expectSymTab("Program Test:");
+		expectSymTab("  Method: void main(0)");
+		expectSymTab("    Local Variable 0: int i");
+		expectSymTab("    Local Variable 1: int j");
+		expectSymTab("    Local Variable 2: int k");
+		// After parsing the whole program, the labels do not appear in the sym tab since they are only contained temporarily while working on the loop
+		parseAndVerify();
+	}
+
+	@Test
+	public void testBreakToForeignLoop() {
+		init("program Test {" + LF +
+				"  void main () int i; int j; int k; {" + LF +
+				"    i = 0;" + LF +
+				"    loop FirstLoop: while (i < 10) {" + LF +
+				"	   i++;" + LF +
+				"    }" + LF +
+				"    loop SecondLoop: while (i < 20) {" + LF +
+				"      /* The label FirstLoop must not be found, since it was inserted within the above loop's scope and not within the method's scope */" + LF +
+				"	   break FirstLoop;" + LF +
+				"    }" + LF +
+				"  }" + LF +
+				"}");
+		expectError(9, 20, NOT_FOUND, "FirstLoop");
 		parseAndVerify();
 	}
 }

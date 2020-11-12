@@ -926,4 +926,21 @@ public class SimpleCodeGenerationTest extends CompilerTestCaseSupport {
 		addExpectedRun("100A");
 		parseAndVerify();
 	}
+
+	@Test
+	public void testLoopShadowingVar() {
+		init("program Test" + LF +
+				"  int i; { " + LF +
+				"  void main () " + LF +
+				"    int j; {" + LF +
+				"    j = 0;" + LF +
+				"    loop i: while (j < 10) {" + LF +
+				"	   /* i is shadowed and is a Label here, not an int */;" + LF +
+				"      i++;" + LF +
+				"    }" + LF +
+				"  }" + LF +
+				"}");
+		expectError(8, 8, NO_OPERAND);
+		parseAndVerify();
+	}
 }
