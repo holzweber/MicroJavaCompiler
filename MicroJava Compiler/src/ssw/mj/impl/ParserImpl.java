@@ -5,7 +5,6 @@ import java.util.EnumSet;
 import ssw.mj.Errors.Message;
 import ssw.mj.Parser;
 import ssw.mj.Scanner;
-import ssw.mj.Token;
 import ssw.mj.Token.Kind;
 import ssw.mj.symtab.Tab;
 import ssw.mj.symtab.Obj;
@@ -24,7 +23,7 @@ public final class ParserImpl extends Parser {
 	 */
 	private static final EnumSet<Kind> firstMethodDecl, firstStatement,
 			firstAssignop, firstRelop, firstExpr, firstAddop, firstMulop,
-			declProgram, followDecl, followStat, followMethodDecl;
+			followDecl, followStat, followMethodDecl;
 
 	/**
 	 * static constructor, for initializing the enumsets above
@@ -39,12 +38,11 @@ public final class ParserImpl extends Parser {
 		firstExpr = EnumSet.of(minus, ident, number, charConst, new_, lpar);
 		firstAddop = EnumSet.of(plus, minus);
 		firstMulop = EnumSet.of(times, slash, rem);
-		declProgram = EnumSet.of(final_, class_, ident);
 
 		// follows enum sets
-		followDecl = EnumSet.of(lbrace, final_, class_, ident, eof);
+		followDecl = EnumSet.of(lbrace, final_, class_, eof);
 		followStat = EnumSet.of(rbrace, if_, loop_, while_, break_, return_,
-				read, print, semicolon, eof); // without lbrace and ident
+				read, print, semicolon, eof, else_); // without lbrace and ident
 		followMethodDecl = EnumSet.of(ident, void_, rbrace, eof);
 	}
 
@@ -69,30 +67,6 @@ public final class ParserImpl extends Parser {
 		check(eof);// checks if src Code ended correctly
 	}
 
-	private void recoverDecl(Message errorMsg) {
-		if (errordistance >= 3) {
-			error(errorMsg);
-			errordistance = 0;
-		}
-		do {
-			scan();
-		} while (!followDecl.contains(sym));
-	}
-
-	private void recovcerMethodDecl() {
-
-	}
-
-	private void recoverStat() {
-		if (errordistance >= 3) {
-			error(INVALID_STAT);
-			errordistance = 0;
-		}
-		do {
-			scan();
-		} while (!followStat.contains(sym));
-	}
-
 	/**
 	 * This method checks whether next token is the one being expected Otherwise
 	 * it rises an Error, that the token is not corr.
@@ -109,11 +83,79 @@ public final class ParserImpl extends Parser {
 
 	}
 
+	/**
+	 * Scans next token
+	 */
 	private void scan() {
 		t = la; // reset the current tokens
 		la = scanner.next(); // get next token(one ahead)
 		sym = la.kind; // for better usage of kind
-		errordistance++;
+		errordistance++; // increase erordistance everytime we scan
+	}
+
+	/**
+	 * Recover Method if there was an error in a Decl Step
+	 * 
+	 * @param errorMsg
+	 *            - depends on which decl failed
+	 */
+	private void recoverDecl(Message errorMsg) {
+		error(errorMsg);
+		do {
+			scan();
+		} while (!((sym == ident && nextTokenIsType())
+				|| followDecl.contains(sym)));
+	}
+
+	/**
+	 * Recover Method if there was an error in a MethDecl step
+	 */
+	private void recovcerMethodDecl() {
+		error(METH_DECL);
+		// scan until recovery point is reached
+		do {
+			scan();
+		} while (!((sym == ident && nextTokenIsType())
+				|| followMethodDecl.contains(sym)));
+		// need an addtional scan, if we breaked because of an rbrace
+		if (sym == rbrace) {
+			scan();
+		}
+	}
+
+	/**
+	 * if there was an error in the NTS Statement, we scan until we reached a
+	 * recovery point.
+	 */
+	private void recoverStat() {
+		error(INVALID_STAT);
+		do {
+			scan(); // scan until recovery point is reached
+		} while (!followStat.contains(sym));
+	}
+
+	/**
+	 * Adds error message to the list of errors. without starting the PanicMode
+	 */
+	@Override
+	public void error(Message msg, Object... msgParams) {
+		if (errordistance >= 3) {
+			scanner.errors.error(la.line, la.col, msg, msgParams);
+		}
+		errordistance = 0;
+	}
+
+	/**
+	 * this method is used, to check if ident is type for error handling
+	 * 
+	 * @return
+	 */
+	private boolean nextTokenIsType() {
+		if (sym != ident) {
+			return false;
+		}
+		Obj obj = tab.find(la.str);
+		return obj.kind == Obj.Kind.Type;
 	}
 
 	/**
@@ -126,7 +168,7 @@ public final class ParserImpl extends Parser {
 		Obj pro = tab.insert(Obj.Kind.Prog, t.str, Tab.noType);
 		tab.openScope(); // opens scope after finished universe
 		// used endless loop with if -else in order to dont double check
-		while (declProgram.contains(sym)) {
+		while (sym != lbrace && sym != eof) {
 			switch (sym) {
 			case final_:
 				constdecl();
@@ -137,8 +179,8 @@ public final class ParserImpl extends Parser {
 			case class_:
 				classdecl();
 				break;
-			default:// dont need default, because we check enumset, just for
-					// supress warning
+			default:
+				recoverDecl(INVALID_DECL);
 				break;
 			}
 		}
@@ -147,7 +189,7 @@ public final class ParserImpl extends Parser {
 		}
 		check(lbrace);
 		// loop as long as new method starts
-		while (firstMethodDecl.contains(sym)) {
+		while (sym != rbrace && sym != eof) {
 			methoddecl();
 		}
 		check(rbrace);
@@ -165,19 +207,34 @@ public final class ParserImpl extends Parser {
 		Obj o = tab.insert(Obj.Kind.Con, t.str, type);
 		check(assign);
 		if (sym == number || sym == charConst) {
-			scan(); // we already now, the next one is valid
-			o.val = t.val; // set value of cosntant
+			// we already now, the next one is valid
+			if (sym == number && type.kind != Struct.Kind.Int) {
+				// we dont got integer, but assign number
+				recoverDecl(CONST_TYPE);
+			} else if (sym == charConst && type.kind != Struct.Kind.Char) {
+				// we dont got char, but assign charConst
+				recoverDecl(CONST_TYPE);
+			} else {
+				scan();
+				o.val = t.val; // set value of cosntant
+				check(semicolon);
+			}
 		} else {
 			error(CONST_DECL); // const decl is not used corr.
 		}
-		check(semicolon);
 	}
 
 	/**
 	 * This method cares about the NTS VarDecl
 	 */
 	private void vardecl() {
+		// get type, if not defined type() will throw error
 		StructImpl type = type();
+		// check if we have a valid type
+		// for a variable decl.
+		if (type.kind == Struct.Kind.None) {
+			recoverDecl(NO_TYPE);
+		}
 		check(ident);
 		tab.insert(Obj.Kind.Var, t.str, type);
 		while (sym == comma) {
@@ -214,28 +271,38 @@ public final class ParserImpl extends Parser {
 	 * : should be void AND not have parameters
 	 */
 	private void methoddecl() {
+
+		if (!firstMethodDecl.contains(sym)) { // wrong start of method detected
+			recovcerMethodDecl();
+			return;
+		}
 		StructImpl type = Tab.noType;
 		Kind returnType = sym; // store return Type of method
 		if (sym == ident) {
-			type = type();
+			if (!nextTokenIsType()) { // method has not a corr. type
+				recovcerMethodDecl();
+				return;
+			} else {
+				type = type();
+			}
 		} else if (sym == void_) {
 			scan();
 		} else {
-			error(METH_DECL);
+			recovcerMethodDecl();
 		}
+
 		check(ident);
 		String methodName = t.str; // store method name could be main
 		Obj meth = tab.insert(Obj.Kind.Meth, t.str, type);
-		check(lpar);
-		boolean tempFormPars = false; // check for formPars
-		tab.openScope();
+		check(lpar); // method block starts
+		boolean tempFormPars = false; // check for formPars (important if main)
+		tab.openScope(); // open new scope of method
 		// optional form pars
 		if (sym == ident) {
 			formpars();
 			tempFormPars = true;
 		}
-		check(rpar);
-
+		check(rpar);// check if methodhead is ended correctly
 		meth.nPars = tab.curScope.nVars(); // save curr number of formpars
 		// we need to check the main method
 		if ("main".equals(methodName)) {
@@ -255,7 +322,7 @@ public final class ParserImpl extends Parser {
 		}
 		meth.locals = tab.curScope.locals(); // relink locals from created scope
 		block();
-		tab.closeScope();
+		tab.closeScope(); // close method scope
 	}
 
 	/**
@@ -298,9 +365,10 @@ public final class ParserImpl extends Parser {
 	 */
 	private void block() {
 		check(lbrace);
-		// There can be arbitrary much statements inside a block
-		while (firstStatement.contains(sym)) {// check if a new statement starts
-			statement();
+		if (t.kind == lbrace) {
+			while (sym != eof && sym != rbrace) {
+				statement();
+			}
 		}
 		check(rbrace);
 	}

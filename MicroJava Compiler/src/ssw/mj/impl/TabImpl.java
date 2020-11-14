@@ -51,17 +51,31 @@ public final class TabImpl extends Tab {
 		closeScope();// get back to universe scope
 	}
 
+	/**
+	 * open a new scope
+	 */
 	public void openScope() {
 		Scope s = new Scope(curScope);
 		curScope = s;
 		curLevel++;
 	}
 
+	/**
+	 * closes current scope
+	 */
 	public void closeScope() {
 		curScope = curScope.outer();
 		curLevel--;
 	}
 
+	/**
+	 * Insert new Obj into current scope
+	 * 
+	 * @param kind
+	 * @param name
+	 * @param type
+	 * @return created Obj
+	 */
 	public Obj insert(Obj.Kind kind, String name, StructImpl type) {
 		// create new Obj with given attributes
 		Obj obj = new Obj(kind, name, type);
@@ -89,7 +103,7 @@ public final class TabImpl extends Tab {
 		Obj obj = curScope.findGlobal(name); // checks local scopes recursively
 		if (obj != null) {
 			return obj;
-		} // found! }
+		} // found!
 		parser.error(Errors.Message.NOT_FOUND, name);
 		return noObj;
 	}
