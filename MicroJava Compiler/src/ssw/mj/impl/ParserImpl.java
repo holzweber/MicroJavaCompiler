@@ -15,6 +15,7 @@ import static ssw.mj.Errors.Message.*;
 
 public final class ParserImpl extends Parser {
 
+	// heuristic errordistance
 	private int errordistance = 3;
 	/*
 	 * define needed EnumSets, for later faster checking EnumSets are only
@@ -43,7 +44,7 @@ public final class ParserImpl extends Parser {
 		followDecl = EnumSet.of(lbrace, final_, class_, eof);
 		followStat = EnumSet.of(rbrace, if_, loop_, while_, break_, return_,
 				read, print, semicolon, eof, else_); // without lbrace and ident
-		followMethodDecl = EnumSet.of(ident, void_, rbrace, eof);
+		followMethodDecl = EnumSet.of(void_, rbrace, eof);
 	}
 
 	/**
@@ -103,8 +104,7 @@ public final class ParserImpl extends Parser {
 		error(errorMsg);
 		do {
 			scan();
-		} while (!((sym == ident && nextTokenIsType())
-				|| followDecl.contains(sym)));
+		} while (!(nextTokenIsType() || followDecl.contains(sym)));
 	}
 
 	/**
@@ -115,8 +115,7 @@ public final class ParserImpl extends Parser {
 		// scan until recovery point is reached
 		do {
 			scan();
-		} while (!((sym == ident && nextTokenIsType())
-				|| followMethodDecl.contains(sym)));
+		} while (!(nextTokenIsType() || followMethodDecl.contains(sym)));
 		// need an addtional scan, if we breaked because of an rbrace
 		if (sym == rbrace) {
 			scan();
@@ -220,7 +219,7 @@ public final class ParserImpl extends Parser {
 				check(semicolon);
 			}
 		} else {
-			error(CONST_DECL); // const decl is not used corr.
+			recoverDecl(CONST_DECL); // const decl is not used corr.
 		}
 	}
 
@@ -274,25 +273,24 @@ public final class ParserImpl extends Parser {
 
 		if (!firstMethodDecl.contains(sym)) { // wrong start of method detected
 			recovcerMethodDecl();
-			return;
+			return;// break current methodDecl
 		}
 		StructImpl type = Tab.noType;
 		Kind returnType = sym; // store return Type of method
 		if (sym == ident) {
 			if (!nextTokenIsType()) { // method has not a corr. type
 				recovcerMethodDecl();
-				return;
-			} else {
-				type = type();
+				return;// break current methodDecl
 			}
+			type = type();
 		} else if (sym == void_) {
 			scan();
 		} else {
 			recovcerMethodDecl();
+			return; // break current methodDecl
 		}
 
 		check(ident);
-		String methodName = t.str; // store method name could be main
 		Obj meth = tab.insert(Obj.Kind.Meth, t.str, type);
 		check(lpar); // method block starts
 		boolean tempFormPars = false; // check for formPars (important if main)
@@ -300,15 +298,15 @@ public final class ParserImpl extends Parser {
 		// optional form pars
 		if (sym == ident) {
 			formpars();
-			tempFormPars = true;
+			tempFormPars = true; // we defined formpars!
 		}
 		check(rpar);// check if methodhead is ended correctly
 		meth.nPars = tab.curScope.nVars(); // save curr number of formpars
 		// we need to check the main method
-		if ("main".equals(methodName)) {
+		if ("main".equals(meth.name)) {
 			if (tempFormPars) { // main is not allowed to have formpars!
 				error(MAIN_WITH_PARAMS);
-			} else if (returnType == ident) { // check if returnType is void
+			} else if (returnType != void_) { // check if returnType is void
 				error(MAIN_NOT_VOID);
 			}
 		}
@@ -365,7 +363,7 @@ public final class ParserImpl extends Parser {
 	 */
 	private void block() {
 		check(lbrace);
-		if (t.kind == lbrace) {
+		if (t.kind == lbrace) { // in case of error
 			while (sym != eof && sym != rbrace) {
 				statement();
 			}
@@ -443,8 +441,8 @@ public final class ParserImpl extends Parser {
 			scan();
 			if (sym == ident) {
 				scan();
-				Obj obj = tab.find(t.str); // check if ident is defined
-				if (obj.kind != Obj.Kind.Label) {// check if ident is loop label
+				// check if ident is defined label
+				if (tab.find(t.str).kind != Obj.Kind.Label) {
 					error(NO_LABEL);
 				}
 			}
@@ -482,7 +480,7 @@ public final class ParserImpl extends Parser {
 			scan();
 			break;
 		default:// if none of above worked, we got an error here
-			error(INVALID_STAT, sym);
+			error(INVALID_STAT);
 		}
 	}
 
@@ -493,7 +491,7 @@ public final class ParserImpl extends Parser {
 		if (firstAssignop.contains(sym)) {// check if valid assignop was used
 			scan();// scan assign token
 		} else {
-			error(ASSIGN_OP, sym);
+			error(ASSIGN_OP);
 		}
 	}
 
@@ -642,7 +640,7 @@ public final class ParserImpl extends Parser {
 		if (firstAddop.contains(sym)) {
 			scan();// we know correct addop will happen
 		} else {// invalid addop
-			error(ADD_OP, sym);
+			error(ADD_OP);
 		}
 	}
 
@@ -653,7 +651,7 @@ public final class ParserImpl extends Parser {
 		if (firstMulop.contains(sym)) {// we know correct mulop will happen
 			scan();
 		} else {// invalid mulop
-			error(MUL_OP, sym);
+			error(MUL_OP);
 		}
 	}
 }

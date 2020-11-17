@@ -26,28 +26,29 @@ public final class TabImpl extends Tab {
 		// chr - Method
 		chrObj = insert(Obj.Kind.Meth, "chr", charType);
 		openScope();// open new scope for creating list
-		insert(Obj.Kind.Var, "i", intType);
+		Obj objI = insert(Obj.Kind.Var, "i", intType);
 		chrObj.nPars = 1; // sets number of parameters manually
-		chrObj.locals = curScope.locals();
-		curScope.locals().get("i").level = 1;// set level to local manually
+		objI.level = 1;// set level to local manually
+		chrObj.locals = curScope.locals();// relink locals from created scope
 		closeScope();// get back to universe scope
 
 		// ord - Method
 		ordObj = insert(Obj.Kind.Meth, "ord", intType);
 		openScope();// open new scope for creating list
-		insert(Obj.Kind.Var, "ch", charType);
+		Obj chObj = insert(Obj.Kind.Var, "ch", charType);
 		ordObj.nPars = 1; // sets number of parameters manually
-		ordObj.locals = curScope.locals();
-		curScope.locals().get("ch").level = 1;// set level to local manually
+		ordObj.locals = curScope.locals(); // relink locals from created scope
+		chObj.level = 1;// set level to local manually
+		// curScope.locals().get("ch").level = 1;
 		closeScope();// get back to universe scope
 
 		// len - Method
 		lenObj = insert(Obj.Kind.Meth, "len", intType);
 		openScope(); // open new scope for creating list
-		insert(Obj.Kind.Var, "arr", new StructImpl(noType));
+		Obj arrObj = insert(Obj.Kind.Var, "arr", new StructImpl(noType));
 		lenObj.nPars = 1;// sets number of parameters manually
-		lenObj.locals = curScope.locals();
-		curScope.locals().get("arr").level = 1; // set level to local manually
+		arrObj.level = 1; // set level to local manually
+		lenObj.locals = curScope.locals();// relink locals from created scope
 		closeScope();// get back to universe scope
 	}
 
