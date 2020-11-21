@@ -44,7 +44,7 @@ public final class ParserImpl extends Parser {
 		followDecl = EnumSet.of(lbrace, final_, class_, eof);
 		followStat = EnumSet.of(rbrace, if_, loop_, while_, break_, return_,
 				read, print, semicolon, eof, else_); // without lbrace and ident
-		followMethodDecl = EnumSet.of(void_, rbrace, eof);
+		followMethodDecl = EnumSet.of(void_, eof);
 	}
 
 	/**
@@ -81,7 +81,6 @@ public final class ParserImpl extends Parser {
 		} else {
 			error(TOKEN_EXPECTED, expected);
 		}
-
 	}
 
 	/**
@@ -116,10 +115,6 @@ public final class ParserImpl extends Parser {
 		do {
 			scan();
 		} while (!(nextTokenIsType() || followMethodDecl.contains(sym)));
-		// need an addtional scan, if we breaked because of an rbrace
-		if (sym == rbrace) {
-			scan();
-		}
 	}
 
 	/**
@@ -191,7 +186,9 @@ public final class ParserImpl extends Parser {
 		while (sym != rbrace && sym != eof) {
 			methoddecl();
 		}
-		check(rbrace);
+		if (sym != eof) {
+			check(rbrace);
+		}
 		pro.locals = tab.curScope.locals();
 		tab.closeScope(); // closes universe
 	}
@@ -285,9 +282,6 @@ public final class ParserImpl extends Parser {
 			type = type();
 		} else if (sym == void_) {
 			scan();
-		} else {
-			recovcerMethodDecl();
-			return; // break current methodDecl
 		}
 
 		check(ident);
