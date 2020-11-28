@@ -6,6 +6,8 @@ import ssw.mj.Errors.Message;
 import ssw.mj.Parser;
 import ssw.mj.Scanner;
 import ssw.mj.Token.Kind;
+import ssw.mj.codegen.Code.OpCode;
+import ssw.mj.codegen.Operand;
 import ssw.mj.symtab.Tab;
 import ssw.mj.symtab.Obj;
 import ssw.mj.symtab.Struct;
@@ -23,8 +25,8 @@ public final class ParserImpl extends Parser {
 	 * NTS.
 	 */
 	private static final EnumSet<Kind> firstMethodDecl, firstStatement,
-			firstAssignop, firstRelop, firstExpr, firstAddop, firstMulop,
-			followDecl, followStat, followMethodDecl;
+			firstRelop, firstExpr, firstAddop, firstMulop, followDecl,
+			followStat, followMethodDecl;
 
 	/**
 	 * static constructor, for initializing the enumsets above
@@ -33,8 +35,6 @@ public final class ParserImpl extends Parser {
 		firstMethodDecl = EnumSet.of(ident, void_);
 		firstStatement = EnumSet.of(ident, if_, loop_, while_, break_, return_,
 				read, print, lbrace, semicolon);
-		firstAssignop = EnumSet.of(assign, plusas, minusas, timesas, slashas,
-				remas);
 		firstRelop = EnumSet.of(eql, neq, lss, leq, gtr, geq);
 		firstExpr = EnumSet.of(minus, ident, number, charConst, new_, lpar);
 		firstAddop = EnumSet.of(plus, minus);
@@ -181,10 +181,18 @@ public final class ParserImpl extends Parser {
 		if (tab.curScope.nVars() > MAX_GLOBALS) {
 			error(TOO_MANY_GLOBALS);
 		}
+
+		// set size of static data (all vars are size of 1 word)
+		code.dataSize = tab.curScope.nVars();
+
 		check(lbrace);
 		// loop as long as new method starts
 		while (sym != rbrace && sym != eof) {
 			methoddecl();
+		}
+		// check if main was defined
+		if (code.mainpc == -1) {
+			error(METH_NOT_FOUND, "main");
 		}
 		if (sym != eof) {
 			check(rbrace);
@@ -279,7 +287,7 @@ public final class ParserImpl extends Parser {
 				recovcerMethodDecl();
 				return;// break current methodDecl
 			}
-			type = type();
+			type = type(); // type of method changed!
 		} else if (sym == void_) {
 			scan();
 		}
@@ -298,11 +306,14 @@ public final class ParserImpl extends Parser {
 		meth.nPars = tab.curScope.nVars(); // save curr number of formpars
 		// we need to check the main method
 		if ("main".equals(meth.name)) {
+			code.mainpc = code.pc; // set main programm counter
 			if (tempFormPars) { // main is not allowed to have formpars!
 				error(MAIN_WITH_PARAMS);
-			} else if (returnType != void_) { // check if returnType is void
+			}
+			if (returnType != void_) { // check if returnType is void
 				error(MAIN_NOT_VOID);
 			}
+
 		}
 
 		while (sym == ident) {
@@ -313,7 +324,21 @@ public final class ParserImpl extends Parser {
 			error(TOO_MANY_LOCALS);
 		}
 		meth.locals = tab.curScope.locals(); // relink locals from created scope
+		// Code generation for entering a method,
+		// defining how many parameters and locals we have
+		code.put(OpCode.enter);
+		code.put(meth.nPars);
+		code.put(tab.curScope.nVars());
 		block();
+		if (meth.type == Tab.noType) {
+			code.put(OpCode.exit);
+			code.put(OpCode.return_);
+		} else { // end of function reached without a return statement
+			code.put(OpCode.trap);
+			code.put(1);
+		}
+		code.put(OpCode.exit);
+		code.put(OpCode.return_);
 		tab.closeScope(); // close method scope
 	}
 
@@ -372,28 +397,118 @@ public final class ParserImpl extends Parser {
 		if (!firstStatement.contains(sym)) {
 			recoverStat();
 		}
-
 		switch (sym) {
 		case ident:// Designator
-			designator();
+			Operand op = designator();
+			Operand op2;
 			switch (sym) {
 			case assign:
+				scan(); // dont need to remeber assignop
+				op2 = expr();
+				// check if designator object is a Variable
+				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
+					error(NO_VAR);
+				}
+				// check if expr is assignable to the desig
+				if (op2.type.assignableTo(op.type)) {
+					code.assign(op, op2);
+				} else {
+					error(INCOMP_TYPES);
+				}
+				break;
 			case plusas:
 			case minusas:
 			case timesas:
 			case slashas:
 			case remas:
-				assignop();
-				expr();
+				OpCode calc = assignop(); // store which calc should be made
+				// check if designator object is a Variable
+				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
+					error(NO_VAR);
+				}
+				// Code generation
+				if (op.kind == Operand.Kind.Fld) {
+					code.put(OpCode.dup);
+				} else if (op.kind == Operand.Kind.Elem) {
+					code.put(OpCode.dup2);
+				}
+				Operand.Kind tempKind = op.kind;
+				code.load(op);
+				op.kind = tempKind;
+
+				op2 = expr(); // get expr
+
+				// check compatility
+				if (op.type != Tab.intType || op2.type != Tab.intType) {
+					error(NO_INT_OP);
+				}
+				if (!op2.type.assignableTo(op.type)) {
+					error(INCOMP_TYPES);
+				}
+				code.load(op2);
+				code.put(calc);
+				code.assign(op, null);
 				break;
 			case lpar:
 				actpars();
 				break;
 			case pplus:
-				scan();
+				// Do Error Checking
+				if (op.type != Tab.intType) {
+					error(NO_INT);
+				}
+				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
+					error(NO_VAR);
+				}
+				scan(); // scans pplus
+				// Now duplicate if needed
+				if (op.kind == Operand.Kind.Fld) {
+					code.put(OpCode.dup);
+				} else if (op.kind == Operand.Kind.Elem) {
+					code.put(OpCode.dup2);
+				}
+
+				if (op.kind == Operand.Kind.Local) {
+					code.put(OpCode.inc);
+					code.put(op.adr);
+					code.put(1);
+				} else {
+					tempKind = op.kind;// we need to remember the type
+					code.load(op);// type is now stack
+					op.kind = tempKind; // reset type
+					code.load(new Operand(1));
+					code.put(OpCode.add);
+					code.assign(op, null);
+				}
 				break;
 			case mminus:
-				scan();
+				// Do Error Checking
+				if (op.type != Tab.intType) {
+					error(NO_INT);
+				}
+				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
+					error(NO_VAR);
+				}
+				scan(); // scans mminus
+				// Now duplicate if needed
+				if (op.kind == Operand.Kind.Fld) {
+					code.put(OpCode.dup);
+				} else if (op.kind == Operand.Kind.Elem) {
+					code.put(OpCode.dup2);
+				}
+
+				if (op.kind == Operand.Kind.Local) {
+					code.put(OpCode.inc);
+					code.put(op.adr);
+					code.put(255);
+				} else {
+					tempKind = op.kind; // we need to remember the type
+					code.load(op); // type is now stack
+					op.kind = tempKind; // reset type
+					code.load(new Operand(-1));
+					code.put(OpCode.add);
+					code.assign(op, null);
+				}
 				break;
 			default:
 				error(DESIGN_FOLLOW);
@@ -445,24 +560,51 @@ public final class ParserImpl extends Parser {
 		case return_:
 			scan();
 			if (firstExpr.contains(sym)) {
-				expr();
+				Operand x = expr();
+				if (true) // check assignable
+					code.load(x);
+			} else {
+				// check if void
 			}
+			code.put(OpCode.exit);
+			code.put(OpCode.return_);
 			check(semicolon);
 			break;
 		case read:
 			scan();
 			check(lpar);
-			designator();
+			op = designator();
+			if (op.type == Tab.intType) {
+				code.put(OpCode.read);
+				code.assign(op, new Operand(Tab.intType));
+			} else if (op.type == Tab.charType) {
+				code.put(OpCode.bread);
+				code.assign(op, new Operand(Tab.charType));
+			} else {
+				error(READ_VALUE);
+			}
 			check(rpar);
 			check(semicolon);
 			break;
 		case print:
 			scan();
 			check(lpar);
-			expr();
+			op = expr();
+			// standardwidth for printing
+			int width = 0; // after comma there dont have to be a given width!
 			if (sym == comma) {
-				scan();// we know colon happened here
+				scan();// we know comma happened here
 				check(number);
+				width = t.val; // coder put a number in here, so reset width
+			}
+			code.load(op);
+			code.load(new Operand(width));
+			if (op.type.kind == Struct.Kind.Int) {
+				code.put(OpCode.print);
+			} else if (op.type.kind == Struct.Kind.Char) {
+				code.put(OpCode.bprint);
+			} else {
+				error(PRINT_VALUE);
 			}
 			check(rpar);
 			check(semicolon);
@@ -479,13 +621,32 @@ public final class ParserImpl extends Parser {
 	}
 
 	/**
-	 * This method cares about the NTS AssignOp
+	 * This method cares about the NTS AssignOp Return return sthe used assign
+	 * operation as OpCode for code generation
 	 */
-	private void assignop() {
-		if (firstAssignop.contains(sym)) {// check if valid assignop was used
-			scan();// scan assign token
-		} else {
+	private OpCode assignop() {
+		switch (sym) {
+		case assign:
+			scan();
+			return OpCode.nop;
+		case plusas:
+			scan();
+			return OpCode.add;
+		case minusas:
+			scan();
+			return OpCode.sub;
+		case timesas:
+			scan();
+			return OpCode.mul;
+		case slashas:
+			scan();
+			return OpCode.div;
+		case remas:
+			scan();
+			return OpCode.rem;
+		default:
 			error(ASSIGN_OP);
+			return OpCode.nop;
 		}
 	}
 
@@ -549,103 +710,213 @@ public final class ParserImpl extends Parser {
 	/**
 	 * This method cares about the NTS Expr
 	 */
-	private void expr() {
+	private Operand expr() {
+		// for compiler optimization, remember if we can negate operand of term
+		boolean neg = false;
 		if (sym == minus) {
 			scan();// we know minus happened
+			neg = true;
 		}
-		term();
+		Operand op = term();
+		if (neg) {
+			if (op.type != Tab.intType) {
+				error(NO_INT_OP);
+			}
+			if (op.kind == Operand.Kind.Con) {
+				op.val = -op.val; // optimize!
+			} else {
+				code.load(op);
+				code.put(OpCode.neg);
+			}
+		}
+
 		while (firstAddop.contains(sym)) {
-			addop();
-			term();
+			OpCode calc = addop();
+			code.load(op);
+			Operand op2 = term();
+			code.load(op2);
+			code.put(calc);
+			if (op.type != Tab.intType || op2.type != Tab.intType) {
+				error(NO_INT_OP);
+			}
 		}
+		return op;
 	}
 
 	/**
 	 * This method cares about the NTS Term
 	 */
-	private void term() {
-		factor();
+	private Operand term() {
+		Operand op = factor();
 		while (firstMulop.contains(sym)) {
-			mulop();
-			factor();
+			OpCode calc = mulop();
+			code.load(op); // we know we onna mulop something
+			Operand op2 = factor();
+			if (op.type != Tab.intType || op2.type != Tab.intType) {
+				error(NO_INT_OP);
+			}
+			code.load(op2);
+			code.put(calc);
 		}
+		return op;
 	}
 
 	/**
 	 * This method cares about the NTS Factor
 	 */
-	private void factor() {
+	private Operand factor() {
+		Operand op;
 		switch (sym) {
 		case ident:
-			designator();
+			op = designator();
 			if (sym == lpar) {
+				if (op.kind != Operand.Kind.Meth) {
+					error(NO_METH); // has to be method!
+				}
+				if (op.obj.type == Tab.noType) {
+					error(INVALID_CALL); // we expected a return value !
+				}
 				actpars();
+				// value should be on stack after meth call on stack
+				op.kind = Operand.Kind.Stack;
 			}
 			break;
 		case number:
 			scan();
+			op = new Operand(t.val);
 			break;
 		case charConst:
 			scan();
+			op = new Operand(t.val);
+			op.type = Tab.charType; // because constructor sets it to int
 			break;
 		case new_:
 			scan();
 			check(ident);
+			Obj obj = tab.find(t.str); // check if class or type exists
+			if (obj.kind != Obj.Kind.Type) {
+				error(NO_TYPE);
+			}
+			StructImpl type = obj.type;
 			if (sym == lbrack) {
 				scan();
-				expr();
+				op = expr();
+				// expr has to be type int
+				if (op.type != Tab.intType) {
+					error(ARRAY_SIZE);
+				}
+				code.load(op);
+				code.put(OpCode.newarray);
+				if (type == Tab.charType) {
+					code.put(0);
+				} else {
+					code.put(1);
+				}
+
+				type = new StructImpl(type);
 				check(rbrack);
+			} else {
+				if (obj.kind != Obj.Kind.Type
+						|| type.kind != Struct.Kind.Class) {
+					error(NO_CLASS_TYPE);
+				} else {
+					code.put(OpCode.new_);
+					code.put2(type.nrFields());
+				}
 			}
+			op = new Operand(type);
 			break;
 		case lpar:
 			scan();
-			expr();
+			op = expr();
 			check(rpar);
 			break;
 		default:
 			error(INVALID_FACT);
+			op = new Operand(1); // factor 1 cant destroy something
 			break;
 		}
+		return op;
 	}
 
 	/**
 	 * This method cares about the NTS Designator
 	 */
-	private void designator() {
+	private Operand designator() {
 		check(ident);
+		Operand op = new Operand(tab.find(t.str), this);
 		for (;;) {
 			if (sym == period) {
+				if (op.type.kind != Struct.Kind.Class) {
+					error(NO_CLASS);
+				}
 				scan();// we know period will happen
+				code.load(op);
 				check(ident);
+				// checks if ident is field of class
+				Obj obj = tab.findField(t.str, op.type);
+				op.kind = Operand.Kind.Fld;
+				op.type = obj.type;
+				op.adr = obj.adr;
 			} else if (sym == lbrack) {
-				scan();// we know lbrack will happen
-				expr();
+				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
+					error(NO_VAL);
+				}
+				scan();// we know lbrack has happened
+				code.load(op);
+				Operand op2 = expr();
+				if (op.type.kind != Struct.Kind.Arr) {
+					error(NO_ARRAY);
+				}
+				if (op2.type != Tab.intType) {
+					error(ARRAY_INDEX);
+				}
+				code.load(op2);
+				op.kind = Operand.Kind.Elem;
+				op.type = op.type.elemType;
 				check(rbrack);
 			} else {
 				break; // break from loop
 			}
 		}
+		return op;
 	}
 
 	/**
 	 * This method cares about the NTS AddOp
 	 */
-	private void addop() {
-		if (firstAddop.contains(sym)) {
-			scan();// we know correct addop will happen
-		} else {// invalid addop
-			error(ADD_OP);
+	private OpCode addop() {
+		switch (sym) {
+		case plus:
+			scan();
+			return OpCode.add;
+		case minus:
+			scan();
+			return OpCode.sub;
+		default:
+			error(ADD_OP); // we do a No operation
+			return OpCode.nop;
 		}
 	}
 
 	/**
-	 * This method cares about the NTS MulOp
+	 * This method cares about the NTS MulOp returns the needed OpCode for
+	 * Codegeneration
 	 */
-	private void mulop() {
-		if (firstMulop.contains(sym)) {// we know correct mulop will happen
+	private OpCode mulop() {
+		switch (sym) {
+		case times:
 			scan();
-		} else {// invalid mulop
+			return OpCode.mul;
+		case slash:
+			scan();
+			return OpCode.div;
+		case rem:
+			scan();
+			return OpCode.rem;
+		default:
 			error(MUL_OP);
+			return OpCode.nop;
 		}
 	}
 }

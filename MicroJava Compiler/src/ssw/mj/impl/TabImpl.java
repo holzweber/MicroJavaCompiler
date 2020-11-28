@@ -39,7 +39,6 @@ public final class TabImpl extends Tab {
 		ordObj.nPars = 1; // sets number of parameters manually
 		ordObj.locals = curScope.locals(); // relink locals from created scope
 		chObj.level = 1;// set level to local manually
-		// curScope.locals().get("ch").level = 1;
 		closeScope();// get back to universe scope
 
 		// len - Method
@@ -78,7 +77,9 @@ public final class TabImpl extends Tab {
 	 * @return created Obj
 	 */
 	public Obj insert(Obj.Kind kind, String name, StructImpl type) {
-		// create new Obj with given attributes
+		if (name == null || name.equals("")) {
+			return noObj;
+		}
 		Obj obj = new Obj(kind, name, type);
 
 		if (kind == Obj.Kind.Var) { // if Kind is Var, set the level and adr
@@ -118,8 +119,9 @@ public final class TabImpl extends Tab {
 	 * @return
 	 */
 	public Obj findField(String name, Struct type) {
-		Obj obj = curScope.findGlobal(name); // checks local scopes recursively
-		if (obj != null && obj.type == type) {
+
+		Obj obj = type.findField(name); // checks local scopes recursively
+		if (obj != null) {
 			return obj; // found!
 		}
 		parser.error(Errors.Message.NO_FIELD, name);
