@@ -20,9 +20,16 @@ public final class CodeImpl extends Code {
 	 * @param y
 	 */
 	void assign(Operand x, Operand y) {
-		if (y != null) {
-			load(y);
-		}
+		load(y);
+		assign(x); // call assign operation for single operand
+	}
+
+	/**
+	 * for pplus mminus, ... only one operand is needed
+	 * 
+	 * @param x
+	 */
+	void assign(Operand x) {
 		switch (x.kind) {
 		case Local:
 			switch (x.adr) {

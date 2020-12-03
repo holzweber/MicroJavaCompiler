@@ -19,6 +19,9 @@ public final class ParserImpl extends Parser {
 
 	// heuristic errordistance
 	private int errordistance = 3;
+	private static final int MIN_ERROR_DIST = 3; // standard minimal error dist
+	private static final int DEFAULT_WIDTH = 1; // standard width for print
+												// statement
 	/*
 	 * define needed EnumSets, for later faster checking EnumSets are only
 	 * created, if we would need more than one check per First comparison of
@@ -133,7 +136,7 @@ public final class ParserImpl extends Parser {
 	 */
 	@Override
 	public void error(Message msg, Object... msgParams) {
-		if (errordistance >= 3) {
+		if (errordistance >= MIN_ERROR_DIST) {
 			scanner.errors.error(la.line, la.col, msg, msgParams);
 		}
 		errordistance = 0;
@@ -330,6 +333,7 @@ public final class ParserImpl extends Parser {
 		code.put(meth.nPars);
 		code.put(tab.curScope.nVars());
 		block();
+		// taken from lecture slides
 		if (meth.type == Tab.noType) {
 			code.put(OpCode.exit);
 			code.put(OpCode.return_);
@@ -337,8 +341,6 @@ public final class ParserImpl extends Parser {
 			code.put(OpCode.trap);
 			code.put(1);
 		}
-		code.put(OpCode.exit);
-		code.put(OpCode.return_);
 		tab.closeScope(); // close method scope
 	}
 
@@ -447,7 +449,7 @@ public final class ParserImpl extends Parser {
 				}
 				code.load(op2);
 				code.put(calc);
-				code.assign(op, null);
+				code.assign(op);
 				break;
 			case lpar:
 				actpars();
@@ -478,7 +480,7 @@ public final class ParserImpl extends Parser {
 					op.kind = tempKind; // reset type
 					code.load(new Operand(1));
 					code.put(OpCode.add);
-					code.assign(op, null);
+					code.assign(op);
 				}
 				break;
 			case mminus:
@@ -507,7 +509,7 @@ public final class ParserImpl extends Parser {
 					op.kind = tempKind; // reset type
 					code.load(new Operand(-1));
 					code.put(OpCode.add);
-					code.assign(op, null);
+					code.assign(op);
 				}
 				break;
 			default:
@@ -560,11 +562,8 @@ public final class ParserImpl extends Parser {
 		case return_:
 			scan();
 			if (firstExpr.contains(sym)) {
-				Operand x = expr();
-				if (true) // check assignable
-					code.load(x);
-			} else {
-				// check if void
+				op = expr();
+				code.load(op);
 			}
 			code.put(OpCode.exit);
 			code.put(OpCode.return_);
@@ -576,10 +575,10 @@ public final class ParserImpl extends Parser {
 			op = designator();
 			if (op.type == Tab.intType) {
 				code.put(OpCode.read);
-				code.assign(op, new Operand(Tab.intType));
+				code.assign(op);
 			} else if (op.type == Tab.charType) {
 				code.put(OpCode.bread);
-				code.assign(op, new Operand(Tab.charType));
+				code.assign(op);
 			} else {
 				error(READ_VALUE);
 			}
@@ -591,7 +590,8 @@ public final class ParserImpl extends Parser {
 			check(lpar);
 			op = expr();
 			// standardwidth for printing
-			int width = 0; // after comma there dont have to be a given width!
+			int width = DEFAULT_WIDTH; // after comma there dont have to be a
+										// given width!
 			if (sym == comma) {
 				scan();// we know comma happened here
 				check(number);
@@ -600,9 +600,10 @@ public final class ParserImpl extends Parser {
 			code.load(op);
 			code.load(new Operand(width));
 			if (op.type.kind == Struct.Kind.Int) {
-				code.put(OpCode.print);
+				code.put(OpCode.print); // print for Integer Kind
 			} else if (op.type.kind == Struct.Kind.Char) {
-				code.put(OpCode.bprint);
+				code.put(OpCode.bprint); // brint used if i only need to print a
+											// byte
 			} else {
 				error(PRINT_VALUE);
 			}
@@ -646,7 +647,7 @@ public final class ParserImpl extends Parser {
 			return OpCode.rem;
 		default:
 			error(ASSIGN_OP);
-			return OpCode.nop;
+			return OpCode.nop; // No operation should be done
 		}
 	}
 
@@ -712,48 +713,49 @@ public final class ParserImpl extends Parser {
 	 */
 	private Operand expr() {
 		// for compiler optimization, remember if we can negate operand of term
-		boolean neg = false;
+		boolean neg = false; // flag which checks, if we can optimize
 		if (sym == minus) {
 			scan();// we know minus happened
-			neg = true;
+			neg = true; // minus before first term!
 		}
 		Operand op = term();
 		if (neg) {
 			if (op.type != Tab.intType) {
-				error(NO_INT_OP);
+				error(NO_INT_OP); // can only negate integer
 			}
-			if (op.kind == Operand.Kind.Con) {
-				op.val = -op.val; // optimize!
+			if (op.kind == Operand.Kind.Con) { // constant optimizsation
+				op.val = -op.val; // just change value
 			} else {
-				code.load(op);
+				code.load(op); // otherwise do it the long way
 				code.put(OpCode.neg);
 			}
 		}
 
 		while (firstAddop.contains(sym)) {
 			OpCode calc = addop();
-			code.load(op);
+			code.load(op); // load operand for add operation
 			Operand op2 = term();
-			code.load(op2);
-			code.put(calc);
 			if (op.type != Tab.intType || op2.type != Tab.intType) {
-				error(NO_INT_OP);
+				error(NO_INT_OP); // can only do a addop if both are intType
 			}
+			code.load(op2); // load second term
+			code.put(calc);
 		}
 		return op;
 	}
 
 	/**
-	 * This method cares about the NTS Term
+	 * This method cares about the NTS Term return a created new Operand
 	 */
 	private Operand term() {
-		Operand op = factor();
+		Operand op = factor(); // get Operand from Factor
 		while (firstMulop.contains(sym)) {
 			OpCode calc = mulop();
-			code.load(op); // we know we onna mulop something
-			Operand op2 = factor();
+			// we know we onna mulop something - need to load operand
+			code.load(op);
+			Operand op2 = factor(); // get second factor of mul operation
 			if (op.type != Tab.intType || op2.type != Tab.intType) {
-				error(NO_INT_OP);
+				error(NO_INT_OP); // can only do a mulop if both are intType
 			}
 			code.load(op2);
 			code.put(calc);
@@ -762,10 +764,10 @@ public final class ParserImpl extends Parser {
 	}
 
 	/**
-	 * This method cares about the NTS Factor
+	 * This method cares about the NTS Factor return a created new Operand
 	 */
 	private Operand factor() {
-		Operand op;
+		Operand op; // factor needs to return a new Operand
 		switch (sym) {
 		case ident:
 			op = designator();
@@ -778,15 +780,16 @@ public final class ParserImpl extends Parser {
 				}
 				actpars();
 				// value should be on stack after meth call on stack
+				// taken form lecture slides
 				op.kind = Operand.Kind.Stack;
 			}
 			break;
 		case number:
-			scan();
+			scan(); // scan numer and create constant operand
 			op = new Operand(t.val);
 			break;
 		case charConst:
-			scan();
+			scan();// scan numer and create constant operand
 			op = new Operand(t.val);
 			op.type = Tab.charType; // because constructor sets it to int
 			break;
@@ -800,17 +803,17 @@ public final class ParserImpl extends Parser {
 			StructImpl type = obj.type;
 			if (sym == lbrack) {
 				scan();
-				op = expr();
+				op = expr();// get size of array
 				// expr has to be type int
 				if (op.type != Tab.intType) {
 					error(ARRAY_SIZE);
 				}
 				code.load(op);
-				code.put(OpCode.newarray);
+				code.put(OpCode.newarray); // create new array
 				if (type == Tab.charType) {
-					code.put(0);
+					code.put(0); // character type
 				} else {
-					code.put(1);
+					code.put(1); // integer type
 				}
 
 				type = new StructImpl(type);
@@ -833,46 +836,49 @@ public final class ParserImpl extends Parser {
 			break;
 		default:
 			error(INVALID_FACT);
-			op = new Operand(1); // factor 1 cant destroy something
+			// set operand to cons operand with constant 1
+			op = new Operand(1); // factor 1 can't destroy something
 			break;
 		}
 		return op;
 	}
 
 	/**
-	 * This method cares about the NTS Designator
+	 * This method cares about the NTS Designator It returns the created Operand
+	 * of this Designator
 	 */
 	private Operand designator() {
 		check(ident);
+		// t.str is the name of the checked ident
 		Operand op = new Operand(tab.find(t.str), this);
 		for (;;) {
-			if (sym == period) {
+			if (sym == period) {// field
 				if (op.type.kind != Struct.Kind.Class) {
-					error(NO_CLASS);
+					error(NO_CLASS);// the operand has to be a valid class
 				}
 				scan();// we know period will happen
 				code.load(op);
 				check(ident);
 				// checks if ident is field of class
 				Obj obj = tab.findField(t.str, op.type);
-				op.kind = Operand.Kind.Fld;
+				op.kind = Operand.Kind.Fld; // have to set kind manually
 				op.type = obj.type;
 				op.adr = obj.adr;
-			} else if (sym == lbrack) {
+			} else if (sym == lbrack) {// element
 				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
 					error(NO_VAL);
 				}
-				scan();// we know lbrack has happened
+				scan();// scan lbrack
 				code.load(op);
-				Operand op2 = expr();
+				Operand op2 = expr(); // get index of array
 				if (op.type.kind != Struct.Kind.Arr) {
-					error(NO_ARRAY);
+					error(NO_ARRAY);// the operand has to be a valid array
 				}
 				if (op2.type != Tab.intType) {
-					error(ARRAY_INDEX);
+					error(ARRAY_INDEX); // index need to be of type int
 				}
 				code.load(op2);
-				op.kind = Operand.Kind.Elem;
+				op.kind = Operand.Kind.Elem;// have to set kind manually
 				op.type = op.type.elemType;
 				check(rbrack);
 			} else {
@@ -883,7 +889,8 @@ public final class ParserImpl extends Parser {
 	}
 
 	/**
-	 * This method cares about the NTS AddOp
+	 * This method cares about the NTS AddOp it return the OpCode of the
+	 * addoptoken for codegeneration
 	 */
 	private OpCode addop() {
 		switch (sym) {
@@ -894,8 +901,8 @@ public final class ParserImpl extends Parser {
 			scan();
 			return OpCode.sub;
 		default:
-			error(ADD_OP); // we do a No operation
-			return OpCode.nop;
+			error(ADD_OP); // wrong add-operation
+			return OpCode.nop;// nop = NO Operation
 		}
 	}
 
@@ -915,8 +922,8 @@ public final class ParserImpl extends Parser {
 			scan();
 			return OpCode.rem;
 		default:
-			error(MUL_OP);
-			return OpCode.nop;
+			error(MUL_OP); // wrong mul-operation
+			return OpCode.nop; // nop = NO Operation
 		}
 	}
 }
