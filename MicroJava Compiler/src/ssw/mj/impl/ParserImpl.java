@@ -5,7 +5,6 @@ import ssw.mj.Parser;
 import ssw.mj.Scanner;
 import ssw.mj.Token.Kind;
 import ssw.mj.codegen.Code;
-import ssw.mj.codegen.Code.CompOp;
 import ssw.mj.codegen.Code.OpCode;
 import ssw.mj.codegen.Label;
 import ssw.mj.codegen.Operand;
@@ -33,8 +32,8 @@ public final class ParserImpl extends Parser {
 	 * NTS.
 	 */
 	private static final EnumSet<Kind> firstMethodDecl, firstStatement,
-			firstRelop, firstExpr, firstAddop, firstMulop, followDecl,
-			followStat, followMethodDecl;
+			firstExpr, firstAddop, firstMulop, followDecl, followStat,
+			followMethodDecl;
 
 	/**
 	 * static constructor, for initializing the enumsets above
@@ -43,7 +42,6 @@ public final class ParserImpl extends Parser {
 		firstMethodDecl = EnumSet.of(ident, void_);
 		firstStatement = EnumSet.of(ident, if_, loop_, while_, break_, return_,
 				read, print, lbrace, semicolon);
-		firstRelop = EnumSet.of(eql, neq, lss, leq, gtr, geq);
 		firstExpr = EnumSet.of(minus, ident, number, charConst, new_, lpar);
 		firstAddop = EnumSet.of(plus, minus);
 		firstMulop = EnumSet.of(times, slash, rem);
@@ -339,7 +337,7 @@ public final class ParserImpl extends Parser {
 		code.put(OpCode.enter);
 		code.put(curMethod.nPars);
 		code.put(tab.curScope.nVars());
-		block(new Stack<>(), new HashMap<>());
+		block(null);
 		// taken from lecture slides
 		if (curMethod.type == Tab.noType) {
 			code.put(OpCode.exit);
@@ -389,12 +387,11 @@ public final class ParserImpl extends Parser {
 	/**
 	 * This method cares about the NTS Block
 	 */
-	private void block(Stack<LabelImpl> breakStack,
-			Map<String, LabelImpl> labeldBreakMap) {
+	private void block(Label breakLabel) {
 		check(lbrace);
 		if (t.kind == lbrace) { // in case of error
 			while (sym != eof && sym != rbrace) {
-				statement(breakStack, labeldBreakMap);
+				statement(breakLabel);
 			}
 		}
 		check(rbrace);
@@ -403,8 +400,7 @@ public final class ParserImpl extends Parser {
 	/**
 	 * This method cares about the NTS Statement
 	 */
-	private void statement(Stack<LabelImpl> breakStack,
-			Map<String, LabelImpl> labeldBreakStack) {
+	private void statement(Label breakLabel) {
 		if (!firstStatement.contains(sym)) {
 			recoverStat();
 		}
@@ -539,13 +535,13 @@ public final class ParserImpl extends Parser {
 			code.fJump(op); // if condition if flase prepare jump
 			op.tLabel.here();
 			check(rpar);
-			statement(breakStack, labeldBreakStack);
+			statement(breakLabel);
 			if (sym == else_) {
 				end = new LabelImpl(code); // need sep. label because of else
 				code.jump(end);
 				op.fLabel.here();
 				scan();
-				statement(breakStack, labeldBreakStack);
+				statement(breakLabel);
 				end.here();
 			} else {
 				op.fLabel.here();
@@ -554,64 +550,61 @@ public final class ParserImpl extends Parser {
 			break;
 		case loop_: // renewedloop
 			scan();// first token after loop
-			LabelImpl breakLabel = new LabelImpl(code);
-			breakStack.push(breakLabel);
 			tab.openScope();
 			check(ident);
-			String labelname = t.str;
-			labeldBreakStack.put(labelname, breakLabel);
-			tab.insert(Obj.Kind.Label, t.str, Tab.noType);
+			// insert Label into SymTab
+			Obj obj = tab.insert(Obj.Kind.Label, t.str, Tab.noType);
 			check(colon);
 			check(while_);
 			check(lpar);
 			Label top = new LabelImpl(code);
 			top.here();
 			op = condition();
+			// we wanna break out of loop, so we need false label of cond
+			obj.label = op.fLabel; // we can reuse the label
+			breakLabel = obj.label;// put label of current loop onto stack
 			code.fJump(op);
 			op.tLabel.here();
 			check(rpar);
-			statement(breakStack, labeldBreakStack);
-			code.jump(top);
-			op.fLabel.here();
-			breakLabel.here();
+			statement(breakLabel);
+			code.jump(top); // jump back to loop top
+			op.fLabel.here(); // condition of loo
 			tab.closeScope();
 			break;
 		case while_:
 			scan(); // check because we wanna use loop here too
-			breakLabel = new LabelImpl(code);
-			breakStack.push(breakLabel);
 			check(lpar);
 			top = new LabelImpl(code);
 			top.here();
 			op = condition();
 			code.fJump(op);
+			// use false label to break out of while loop
+			breakLabel = op.fLabel;
 			op.tLabel.here();
 			check(rpar);
-			statement(breakStack, labeldBreakStack);
+			statement(breakLabel);
 			code.jump(top);
 			op.fLabel.here();
-			breakLabel.here(); // if break we should end up here
 			break;
 		case break_:
 			scan();
 			if (sym == ident) {
 				scan();
-				String wannabreak = t.str;
+				obj = tab.find(t.str);
 				// check if ident is defined label
-				if (tab.find(t.str).kind != Obj.Kind.Label) {
+				if (obj.kind != Obj.Kind.Label) {
 					error(NO_LABEL);
 				}
-				if (!labeldBreakStack.containsKey(wannabreak)) {
-					error(NOT_FOUND, wannabreak);
+				if (obj.label == null) { // no label defined
+					error(NOT_FOUND, t.str);
 				} else {
-					code.jump(labeldBreakStack.get(wannabreak));
-					labeldBreakStack.remove(wannabreak);
+					code.jump(obj.label);
 				}
 			} else { // unlabeld break
-				if (breakStack.isEmpty()) {
+				if (breakLabel == null) {
 					error(NO_LOOP);
 				} else {
-					code.jump(breakStack.pop());
+					code.jump(breakLabel);
 				}
 			}
 			check(semicolon);
@@ -676,7 +669,7 @@ public final class ParserImpl extends Parser {
 			check(semicolon);
 			break;
 		case lbrace:
-			block(breakStack, labeldBreakStack);
+			block(breakLabel);
 			break;
 		case semicolon:
 			scan();
