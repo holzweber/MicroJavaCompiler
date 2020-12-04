@@ -689,134 +689,87 @@ public class CodeGenerationTest extends CompilerTestCaseSupport {
 		parseAndVerify();
 	}
 
+	@Test
+	public void holzweber() {
+		initFile("TestProgram.mj");
+		addExpectedRun("1234\n");
+		parseAndVerify();
+	}
 
 	@Test
 	public void testNestedLabeledLoopsWithLabeledBreak1() {
-		init("program Test {" + LF +
-				"  void main () int i; int j; int k; {" + LF +
-				"    i = 0;" + LF +
-				"    loop Outer: while (i < 5) {" + LF +
-				"	   j = 0;" + LF +
-				"      loop Middle: while (j < 4) {" + LF +
-				"        k = 0;" + LF +
-				"        loop Inner: while (k < 3) {" + LF +
-				"          k++;" + LF +
-				"          break Outer;" + LF +
-				"        }" + LF +
-				"	     j++;" + LF +
-				"	   }" + LF +
-				"	   i++;" + LF +
-				"    }" + LF +
-				"    print(i);" + LF +
-				"    print(j);" + LF +
-				"    print(k);" + LF +
-				"  }" + LF +
-				"}");
+		init("program Test {" + LF + "  void main () int i; int j; int k; {"
+				+ LF + "    i = 0;" + LF + "    loop Outer: while (i < 5) {"
+				+ LF + "	   j = 0;" + LF
+				+ "      loop Middle: while (j < 4) {" + LF + "        k = 0;"
+				+ LF + "        loop Inner: while (k < 3) {" + LF
+				+ "          k++;" + LF + "          break Outer;" + LF
+				+ "        }" + LF + "	     j++;" + LF + "	   }" + LF
+				+ "	   i++;" + LF + "    }" + LF + "    print(i);" + LF
+				+ "    print(j);" + LF + "    print(k);" + LF + "  }" + LF
+				+ "}");
 		addExpectedRun("001");
 		parseAndVerify();
 	}
 
 	@Test
 	public void testNestedLabeledLoopsWithLabeledBreak2() {
-		init("program Test {" + LF +
-				"  void main () int i; int j; int k; {" + LF +
-				"    i = 0;" + LF +
-				"    loop Outer: while (i < 5) {" + LF +
-				"	   j = 0;" + LF +
-				"      loop Middle: while (j < 4) {" + LF +
-				"        k = 0;" + LF +
-				"        loop Inner: while (k < 3) {" + LF +
-				"          k++;" + LF +
-				"          break Inner;" + LF +
-				"        }" + LF +
-				"	     j++;" + LF +
-				"	   }" + LF +
-				"	   i++;" + LF +
-				"    }" + LF +
-				"    print(i);" + LF +
-				"    print(j);" + LF +
-				"    print(k);" + LF +
-				"  }" + LF +
-				"}");
+		init("program Test {" + LF + "  void main () int i; int j; int k; {"
+				+ LF + "    i = 0;" + LF + "    loop Outer: while (i < 5) {"
+				+ LF + "	   j = 0;" + LF
+				+ "      loop Middle: while (j < 4) {" + LF + "        k = 0;"
+				+ LF + "        loop Inner: while (k < 3) {" + LF
+				+ "          k++;" + LF + "          break Inner;" + LF
+				+ "        }" + LF + "	     j++;" + LF + "	   }" + LF
+				+ "	   i++;" + LF + "    }" + LF + "    print(i);" + LF
+				+ "    print(j);" + LF + "    print(k);" + LF + "  }" + LF
+				+ "}");
 		addExpectedRun("541");
 		parseAndVerify();
 	}
 
 	@Test
 	public void testNestedLabeledLoopsWithShadowedLabeledBreak() {
-		init("program Test {" + LF +
-				"  void main () int i; int j; int k; {" + LF +
-				"    i = 0;" + LF +
-				"    loop L: while (i < 5) {" + LF +
-				"	   j = 0;" + LF +
-				"      loop L: while (j < 4) {" + LF +
-				"        k = 0;" + LF +
-				"        loop L: while (k < 3) {" + LF +
-				"          k++;" + LF +
-				"          /* Should break most-inner loop (like testNestedLabeledLoopsWithLabeledBreak2) */;" + LF +
-				"          break L;" + LF +
-				"        }" + LF +
-				"	     j++;" + LF +
-				"	   }" + LF +
-				"	   i++;" + LF +
-				"    }" + LF +
-				"    print(i);" + LF +
-				"    print(j);" + LF +
-				"    print(k);" + LF +
-				"  }" + LF +
-				"}");
+		init("program Test {" + LF + "  void main () int i; int j; int k; {"
+				+ LF + "    i = 0;" + LF + "    loop L: while (i < 5) {" + LF
+				+ "	   j = 0;" + LF + "      loop L: while (j < 4) {" + LF
+				+ "        k = 0;" + LF + "        loop L: while (k < 3) {" + LF
+				+ "          k++;" + LF
+				+ "          /* Should break most-inner loop (like testNestedLabeledLoopsWithLabeledBreak2) */;"
+				+ LF + "          break L;" + LF + "        }" + LF
+				+ "	     j++;" + LF + "	   }" + LF + "	   i++;" + LF + "    }"
+				+ LF + "    print(i);" + LF + "    print(j);" + LF
+				+ "    print(k);" + LF + "  }" + LF + "}");
 		addExpectedRun("541");
 		parseAndVerify();
 	}
 
 	@Test
 	public void testNestedLabeledLoopsWithNormalBreak() {
-		init("program Test {" + LF +
-				"  void main () int i; int j; int k; {" + LF +
-				"    i = 0;" + LF +
-				"    loop Outer: while (i < 5) {" + LF +
-				"	   j = 0;" + LF +
-				"      loop Middle: while (j < 4) {" + LF +
-				"        k = 0;" + LF +
-				"        loop Inner: while (k < 3) {" + LF +
-				"          k++;" + LF +
-				"          break;" + LF +
-				"        }" + LF +
-				"	     j++;" + LF +
-				"	   }" + LF +
-				"	   i++;" + LF +
-				"    }" + LF +
-				"    print(i);" + LF +
-				"    print(j);" + LF +
-				"    print(k);" + LF +
-				"  }" + LF +
-				"}");
+		init("program Test {" + LF + "  void main () int i; int j; int k; {"
+				+ LF + "    i = 0;" + LF + "    loop Outer: while (i < 5) {"
+				+ LF + "	   j = 0;" + LF
+				+ "      loop Middle: while (j < 4) {" + LF + "        k = 0;"
+				+ LF + "        loop Inner: while (k < 3) {" + LF
+				+ "          k++;" + LF + "          break;" + LF + "        }"
+				+ LF + "	     j++;" + LF + "	   }" + LF + "	   i++;" + LF
+				+ "    }" + LF + "    print(i);" + LF + "    print(j);" + LF
+				+ "    print(k);" + LF + "  }" + LF + "}");
 		addExpectedRun("541");
 		parseAndVerify();
 	}
 
-
 	@Test
 	public void testNestedLabeledLoopsWithoutBreak() {
-		init("program Test {" + LF +
-				"  void main () int i; int j; int k; {" + LF +
-				"    i = 0;" + LF +
-				"    loop Outer: while (i < 5) {" + LF +
-				"	   j = 0;" + LF +
-				"      loop Middle: while (j < 4) {" + LF +
-				"        k = 0;" + LF +
-				"        loop Inner: while (k < 3) {" + LF +
-				"          k++;" + LF +
-				"        }" + LF +
-				"	     j++;" + LF +
-				"	   }" + LF +
-				"	   i++;" + LF +
-				"    }" + LF +
-				"    print(i);" + LF +
-				"    print(j);" + LF +
-				"    print(k);" + LF +
-				"  }" + LF +
-				"}");
+		init("program Test {" + LF + "  void main () int i; int j; int k; {"
+				+ LF + "    i = 0;" + LF + "    loop Outer: while (i < 5) {"
+				+ LF + "	   j = 0;" + LF
+				+ "      loop Middle: while (j < 4) {" + LF + "        k = 0;"
+				+ LF + "        loop Inner: while (k < 3) {" + LF
+				+ "          k++;" + LF + "        }" + LF + "	     j++;" + LF
+				+ "	   }" + LF + "	   i++;" + LF + "    }" + LF
+				+ "    print(i);" + LF + "    print(j);" + LF + "    print(k);"
+				+ LF + "  }" + LF + "}");
 		addExpectedRun("543");
 		parseAndVerify();
 	}

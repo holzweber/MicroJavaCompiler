@@ -724,7 +724,8 @@ public class SimpleCodeGenerationTest extends CompilerTestCaseSupport {
 				"    c[0].b.a.x[8]++;" + LF + //
 				"    c[3].b.a.x[2]++;" + LF + //
 				"    c[3].b.a.x[2]*=3;" + LF + //
-				"    c[0].b.a.x[8]+=50 + c[3].b.a.x[2] * c[3].b.a.x[2] * c[0].b.a.x[0];" + LF + //
+				"    c[0].b.a.x[8]+=50 + c[3].b.a.x[2] * c[3].b.a.x[2] * c[0].b.a.x[0];"
+				+ LF + //
 				"    print(c[0].b.a.x[8]);" + LF + //
 				"  }" + LF + //
 				"}");
@@ -817,7 +818,7 @@ public class SimpleCodeGenerationTest extends CompilerTestCaseSupport {
 				"    a.x = 20;" + LF + //
 				"    a.x++;" + LF + //
 				"    a.x /= 7;" + LF + //
-				"    a.x *= a.x;" + LF + //
+				"    a.x *= a.x;" + LF + // 44
 				"    a.x %= a.x - 5;" + LF + //
 				"    b.a = new A;" + LF + //
 				"    b.a.x = -12;" + LF + //
@@ -829,6 +830,27 @@ public class SimpleCodeGenerationTest extends CompilerTestCaseSupport {
 				"  }" + LF + //
 				"}");
 		addExpectedRun("21");
+		parseAndVerify();
+	}
+
+	@Test
+	public void holzweber() {
+		init("program A" + LF + // 1
+				" class A{ int x;}" + LF + //
+				" class B{ char y;}" + LF + //
+				"{" + LF + // 2
+				"  void main()" + LF + //
+				"    A a;" + LF + //
+				"    B b;" + LF + //
+				"  {" + LF + //
+				"    a = new A;" + LF + //
+				"    a.x = 2;" + LF + //
+				"    a.x++;" + LF + //
+				"    b = new B;" + LF + //
+				"    print(a.x); " + LF + //
+				"  }           " + LF + //
+				"}");
+		addExpectedRun("3");
 		parseAndVerify();
 	}
 
@@ -849,7 +871,8 @@ public class SimpleCodeGenerationTest extends CompilerTestCaseSupport {
 		addExpectedRun("2");
 		parseAndVerify();
 		Assert.assertTrue(
-				"In this example mainpc must be > 0, most likely it should be 7, but it is: " + parser.code.mainpc,
+				"In this example mainpc must be > 0, most likely it should be 7, but it is: "
+						+ parser.code.mainpc,
 				parser.code.mainpc > 0);
 	}
 
@@ -929,17 +952,11 @@ public class SimpleCodeGenerationTest extends CompilerTestCaseSupport {
 
 	@Test
 	public void testLoopShadowingVar() {
-		init("program Test" + LF +
-				"  int i; { " + LF +
-				"  void main () " + LF +
-				"    int j; {" + LF +
-				"    j = 0;" + LF +
-				"    loop i: while (j < 10) {" + LF +
-				"	   /* i is shadowed and is a Label here, not an int */;" + LF +
-				"      i++;" + LF +
-				"    }" + LF +
-				"  }" + LF +
-				"}");
+		init("program Test" + LF + "  int i; { " + LF + "  void main () " + LF
+				+ "    int j; {" + LF + "    j = 0;" + LF
+				+ "    loop i: while (j < 10) {" + LF
+				+ "	   /* i is shadowed and is a Label here, not an int */;"
+				+ LF + "      i++;" + LF + "    }" + LF + "  }" + LF + "}");
 		expectError(8, 8, NO_OPERAND);
 		parseAndVerify();
 	}
