@@ -33,7 +33,7 @@ public final class StructImpl extends Struct {
 						&& dest.elemType == Tab.noType); // for function len()
 	}
 
-	private boolean isRefType() {
+	boolean isRefType() {
 		return kind == Kind.Class || kind == Kind.Arr;
 	}
 

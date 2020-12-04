@@ -3,6 +3,7 @@ package ssw.mj.impl;
 import ssw.mj.Errors;
 import ssw.mj.Parser;
 import ssw.mj.codegen.Code;
+import ssw.mj.codegen.Label;
 import ssw.mj.codegen.Operand;
 import ssw.mj.symtab.Tab;
 
@@ -10,6 +11,60 @@ public final class CodeImpl extends Code {
 
 	public CodeImpl(Parser p) {
 		super(p);
+	}
+
+	/**
+	 * generates unconditional jump instruction to lab
+	 */
+	void jump(Label lab) {
+		put(OpCode.jmp);
+		lab.put();
+	}
+
+	/**
+	 * generates conditional jump instruction for true jump x represents the
+	 * condition
+	 */
+	void tJump(Operand x) {
+		setJump(x.op); // set correct OpCode
+		x.tLabel.put();
+	}
+
+	/**
+	 * generates conditional jump instruction for false jump x represents the
+	 * condition
+	 */
+	void fJump(Operand x) {
+		setJump(CompOp.invert(x.op)); // need to set inverted OpCode
+		x.fLabel.put();
+	}
+
+	/**
+	 * Helper Method which set the correct OpCode depending on the CompOp
+	 * 
+	 * @param comp
+	 */
+	private void setJump(CompOp comp) {
+		switch (comp) {// set jeq, jne, jlt, jle, ...
+		case eq:
+			put(OpCode.jeq);
+			break;
+		case ne:
+			put(OpCode.jne);
+			break;
+		case lt:
+			put(OpCode.jlt);
+			break;
+		case le:
+			put(OpCode.jle);
+			break;
+		case gt:
+			put(OpCode.jgt);
+			break;
+		case ge:
+			put(OpCode.jge);
+			break;
+		}
 	}
 
 	/**

@@ -1,18 +1,22 @@
 package ssw.mj.impl;
 
-import java.util.EnumSet;
-
 import ssw.mj.Errors.Message;
 import ssw.mj.Parser;
 import ssw.mj.Scanner;
 import ssw.mj.Token.Kind;
+import ssw.mj.codegen.Code;
+import ssw.mj.codegen.Code.CompOp;
 import ssw.mj.codegen.Code.OpCode;
+import ssw.mj.codegen.Label;
 import ssw.mj.codegen.Operand;
 import ssw.mj.symtab.Tab;
 import ssw.mj.symtab.Obj;
 import ssw.mj.symtab.Struct;
 
 import static ssw.mj.Token.Kind.*;
+
+import java.util.*;
+
 import static ssw.mj.Errors.Message.*;
 
 public final class ParserImpl extends Parser {
@@ -22,6 +26,7 @@ public final class ParserImpl extends Parser {
 	private static final int MIN_ERROR_DIST = 3; // standard minimal error dist
 	private static final int DEFAULT_WIDTH = 1; // standard width for print
 												// statement
+	private Obj curMethod;
 	/*
 	 * define needed EnumSets, for later faster checking EnumSets are only
 	 * created, if we would need more than one check per First comparison of
@@ -296,7 +301,7 @@ public final class ParserImpl extends Parser {
 		}
 
 		check(ident);
-		Obj meth = tab.insert(Obj.Kind.Meth, t.str, type);
+		curMethod = tab.insert(Obj.Kind.Meth, t.str, type);
 		check(lpar); // method block starts
 		boolean tempFormPars = false; // check for formPars (important if main)
 		tab.openScope(); // open new scope of method
@@ -306,9 +311,9 @@ public final class ParserImpl extends Parser {
 			tempFormPars = true; // we defined formpars!
 		}
 		check(rpar);// check if methodhead is ended correctly
-		meth.nPars = tab.curScope.nVars(); // save curr number of formpars
+		curMethod.nPars = tab.curScope.nVars(); // save curr number of formpars
 		// we need to check the main method
-		if ("main".equals(meth.name)) {
+		if ("main".equals(curMethod.name)) {
 			code.mainpc = code.pc; // set main programm counter
 			if (tempFormPars) { // main is not allowed to have formpars!
 				error(MAIN_WITH_PARAMS);
@@ -326,15 +331,17 @@ public final class ParserImpl extends Parser {
 		if (tab.curScope.nVars() > MAX_LOCALS) {
 			error(TOO_MANY_LOCALS);
 		}
-		meth.locals = tab.curScope.locals(); // relink locals from created scope
+		curMethod.locals = tab.curScope.locals(); // relink locals from created
+													// scope
 		// Code generation for entering a method,
 		// defining how many parameters and locals we have
+		curMethod.adr = code.pc;
 		code.put(OpCode.enter);
-		code.put(meth.nPars);
+		code.put(curMethod.nPars);
 		code.put(tab.curScope.nVars());
-		block();
+		block(new Stack<>(), new HashMap<>());
 		// taken from lecture slides
-		if (meth.type == Tab.noType) {
+		if (curMethod.type == Tab.noType) {
 			code.put(OpCode.exit);
 			code.put(OpCode.return_);
 		} else { // end of function reached without a return statement
@@ -382,11 +389,12 @@ public final class ParserImpl extends Parser {
 	/**
 	 * This method cares about the NTS Block
 	 */
-	private void block() {
+	private void block(Stack<LabelImpl> breakStack,
+			Map<String, LabelImpl> labeldBreakMap) {
 		check(lbrace);
 		if (t.kind == lbrace) { // in case of error
 			while (sym != eof && sym != rbrace) {
-				statement();
+				statement(breakStack, labeldBreakMap);
 			}
 		}
 		check(rbrace);
@@ -395,7 +403,8 @@ public final class ParserImpl extends Parser {
 	/**
 	 * This method cares about the NTS Statement
 	 */
-	private void statement() {
+	private void statement(Stack<LabelImpl> breakStack,
+			Map<String, LabelImpl> labeldBreakStack) {
 		if (!firstStatement.contains(sym)) {
 			recoverStat();
 		}
@@ -452,7 +461,12 @@ public final class ParserImpl extends Parser {
 				code.assign(op);
 				break;
 			case lpar:
-				actpars();
+				actpars(op);
+				code.put(Code.OpCode.call);
+				code.put2(op.adr - (code.pc - 1));
+				if (op.type != Tab.noType) {
+					code.put(Code.OpCode.pop);
+				}
 				break;
 			case pplus:
 				// Do Error Checking
@@ -518,43 +532,86 @@ public final class ParserImpl extends Parser {
 			check(semicolon);
 			break;
 		case if_:
+			Label end;
 			scan();
 			check(lpar);
-			condition();
+			op = condition();
+			code.fJump(op); // if condition if flase prepare jump
+			op.tLabel.here();
 			check(rpar);
-			statement();
+			statement(breakStack, labeldBreakStack);
 			if (sym == else_) {
+				end = new LabelImpl(code); // need sep. label because of else
+				code.jump(end);
+				op.fLabel.here();
 				scan();
-				statement();
+				statement(breakStack, labeldBreakStack);
+				end.here();
+			} else {
+				op.fLabel.here();
 			}
+
 			break;
 		case loop_: // renewedloop
 			scan();// first token after loop
+			LabelImpl breakLabel = new LabelImpl(code);
+			breakStack.push(breakLabel);
 			tab.openScope();
 			check(ident);
+			String labelname = t.str;
+			labeldBreakStack.put(labelname, breakLabel);
 			tab.insert(Obj.Kind.Label, t.str, Tab.noType);
 			check(colon);
 			check(while_);
 			check(lpar);
-			condition();
+			Label top = new LabelImpl(code);
+			top.here();
+			op = condition();
+			code.fJump(op);
+			op.tLabel.here();
 			check(rpar);
-			statement();
+			statement(breakStack, labeldBreakStack);
+			code.jump(top);
+			op.fLabel.here();
+			breakLabel.here();
 			tab.closeScope();
 			break;
 		case while_:
 			scan(); // check because we wanna use loop here too
+			breakLabel = new LabelImpl(code);
+			breakStack.push(breakLabel);
 			check(lpar);
-			condition();
+			top = new LabelImpl(code);
+			top.here();
+			op = condition();
+			code.fJump(op);
+			op.tLabel.here();
 			check(rpar);
-			statement();
+			statement(breakStack, labeldBreakStack);
+			code.jump(top);
+			op.fLabel.here();
+			breakLabel.here(); // if break we should end up here
 			break;
 		case break_:
 			scan();
 			if (sym == ident) {
 				scan();
+				String wannabreak = t.str;
 				// check if ident is defined label
 				if (tab.find(t.str).kind != Obj.Kind.Label) {
 					error(NO_LABEL);
+				}
+				if (!labeldBreakStack.containsKey(wannabreak)) {
+					error(NOT_FOUND, wannabreak);
+				} else {
+					code.jump(labeldBreakStack.get(wannabreak));
+					labeldBreakStack.remove(wannabreak);
+				}
+			} else { // unlabeld break
+				if (breakStack.isEmpty()) {
+					error(NO_LOOP);
+				} else {
+					code.jump(breakStack.pop());
 				}
 			}
 			check(semicolon);
@@ -562,8 +619,16 @@ public final class ParserImpl extends Parser {
 		case return_:
 			scan();
 			if (firstExpr.contains(sym)) {
+				if (curMethod.type == Tab.noType) {
+					error(RETURN_VOID);
+				}
 				op = expr();
 				code.load(op);
+				if (!op.type.assignableTo(curMethod.type)) {
+					error(RETURN_TYPE);
+				}
+			} else if (curMethod.type != Tab.noType) {
+				error(RETURN_NO_VAL);
 			}
 			code.put(OpCode.exit);
 			code.put(OpCode.return_);
@@ -611,7 +676,7 @@ public final class ParserImpl extends Parser {
 			check(semicolon);
 			break;
 		case lbrace:
-			block();
+			block(breakStack, labeldBreakStack);
 			break;
 		case semicolon:
 			scan();
@@ -653,14 +718,45 @@ public final class ParserImpl extends Parser {
 
 	/**
 	 * This method cares about the NTS ActPars
+	 * 
+	 * @param op
 	 */
-	private void actpars() {
+	private void actpars(Operand m) {
 		check(lpar);
+		Operand ap;
+		if (m.kind != Operand.Kind.Meth) {
+			error(NO_METH);
+			m.obj = tab.noObj;
+		}
+		int aPars = 0;
+		int fPars = m.obj.nPars;
+		Iterator<Obj> fp = m.obj.locals.values().iterator();
 		if (firstExpr.contains(sym)) {// check if expr follows
-			expr();
+			ap = expr();
+			code.load(ap);
+			aPars++;
+			if (fp.hasNext()) {
+				Obj o = fp.next();
+				if (!ap.type.assignableTo(o.type)) {
+					error(PARAM_TYPE);
+				}
+			}
 			while (sym == comma) {
 				scan();// we know commma happened
-				expr();
+				ap = expr();
+				code.load(ap);
+				aPars++;
+				if (fp.hasNext()) {
+					Obj o = fp.next();
+					if (!ap.type.assignableTo(o.type)) {
+						error(PARAM_TYPE);
+					}
+				}
+			}
+			if (aPars > fPars) {
+				error(MORE_ACTUAL_PARAMS);
+			} else if (aPars < fPars) {
+				error(LESS_ACTUAL_PARAMS);
 			}
 		}
 		check(rpar);
@@ -669,42 +765,79 @@ public final class ParserImpl extends Parser {
 	/**
 	 * This method cares about the NTS Condition
 	 */
-	private void condition() {
-		condterm();
+	private Operand condition() {
+		Operand op = condterm();
 		while (sym == or) {
+			code.tJump(op);
 			scan();// we know 'or' happened
-			condterm();
+			op.fLabel.here();
+			Operand op2 = condterm();
+			op.fLabel = op2.fLabel;
+			op.op = op2.op;
 		}
+		return op;
 	}
 
 	/**
 	 * This method cares about the NTS CondTerm
 	 */
-	private void condterm() {
-		condfact();
+	private Operand condterm() {
+		Operand op = condfact();
 		while (sym == and) {
-			scan();// we know 'and' happened
-			condfact();
+			code.fJump(op);
+			scan();
+			Operand op2 = condfact();
+			op.op = op2.op;
 		}
+		return op;
 	}
 
 	/**
 	 * This method cares about the NTS CondFact
 	 */
-	private void condfact() {
-		expr();
-		relop();
-		expr();
+	private Operand condfact() {
+		Operand op = expr();
+		code.load(op);
+		Code.CompOp comp = relop();
+		Operand op2 = expr();
+		code.load(op2);
+		if (!op.type.compatibleWith(op2.type)) {
+			error(INCOMP_TYPES);
+		}
+		if (op.type.isRefType() && comp != Code.CompOp.eq
+				&& comp != Code.CompOp.ne) {
+			error(EQ_CHECK);
+		}
+
+		return new Operand(comp, code);
 	}
 
 	/**
 	 * This method cares about the NTS Relop
 	 */
-	private void relop() {
-		if (firstRelop.contains(sym)) {
+	private Code.CompOp relop() {
+		switch (sym) {
+		case eql:
 			scan();
-		} else {
+			return Code.CompOp.eq;
+		case neq:
+			scan();
+			return Code.CompOp.ne;
+		case lss:
+			scan();
+			return Code.CompOp.lt;
+		case leq:
+			scan();
+			return Code.CompOp.le;
+		case gtr:
+			scan();
+			return Code.CompOp.gt;
+		case geq:
+			scan();
+			return Code.CompOp.ge;
+		default:
 			error(REL_OP);
+			return Code.CompOp.eq; // better then returning null
 		}
 	}
 
@@ -772,13 +905,22 @@ public final class ParserImpl extends Parser {
 		case ident:
 			op = designator();
 			if (sym == lpar) {
-				if (op.kind != Operand.Kind.Meth) {
-					error(NO_METH); // has to be method!
-				}
+				/*
+				 * if (op.kind != Operand.Kind.Meth) { error(NO_METH); // has to
+				 * be method! }
+				 */
 				if (op.obj.type == Tab.noType) {
 					error(INVALID_CALL); // we expected a return value !
 				}
-				actpars();
+				actpars(op);
+				if (op.obj == tab.ordObj || op.obj == tab.chrObj) {
+					; // nothing
+				} else if (op.obj == tab.lenObj)
+					code.put(Code.OpCode.arraylength);
+				else {
+					code.put(Code.OpCode.call);
+					code.put2(op.adr - (code.pc - 1));
+				}
 				// value should be on stack after meth call on stack
 				// taken form lecture slides
 				op.kind = Operand.Kind.Stack;
