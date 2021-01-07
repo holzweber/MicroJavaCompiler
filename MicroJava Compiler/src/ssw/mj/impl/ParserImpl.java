@@ -434,14 +434,12 @@ public final class ParserImpl extends Parser {
 					error(NO_VAR);
 				}
 				// Code generation
-				if (op.kind == Operand.Kind.Fld) {
-					code.put(OpCode.dup);
-				} else if (op.kind == Operand.Kind.Elem) {
-					code.put(OpCode.dup2);
-				}
-				Operand.Kind tempKind = op.kind;
-				code.load(op);
-				op.kind = tempKind;
+				// duplicate
+				code.duplicate(op);
+
+				Operand.Kind tempKind = op.kind; // store kind
+				code.load(op); // load operand, - kind is now stack
+				op.kind = tempKind; // reset kind
 
 				op2 = expr(); // get expr
 
@@ -454,7 +452,7 @@ public final class ParserImpl extends Parser {
 				}
 				code.load(op2);
 				code.put(calc);
-				code.assign(op);
+				code.store(op);
 				break;
 			case lpar:
 				actpars(op);
@@ -465,34 +463,6 @@ public final class ParserImpl extends Parser {
 				}
 				break;
 			case pplus:
-				// Do Error Checking
-				if (op.type != Tab.intType) {
-					error(NO_INT);
-				}
-				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
-					error(NO_VAR);
-				}
-				scan(); // scans pplus
-				// Now duplicate if needed
-				if (op.kind == Operand.Kind.Fld) {
-					code.put(OpCode.dup);
-				} else if (op.kind == Operand.Kind.Elem) {
-					code.put(OpCode.dup2);
-				}
-
-				if (op.kind == Operand.Kind.Local) {
-					code.put(OpCode.inc);
-					code.put(op.adr);
-					code.put(1);
-				} else {
-					tempKind = op.kind;// we need to remember the type
-					code.load(op);// type is now stack
-					op.kind = tempKind; // reset type
-					code.load(new Operand(1));
-					code.put(OpCode.add);
-					code.assign(op);
-				}
-				break;
 			case mminus:
 				// Do Error Checking
 				if (op.type != Tab.intType) {
@@ -501,26 +471,15 @@ public final class ParserImpl extends Parser {
 				if (op.obj != null && op.obj.kind != Obj.Kind.Var) {
 					error(NO_VAR);
 				}
-				scan(); // scans mminus
-				// Now duplicate if needed
-				if (op.kind == Operand.Kind.Fld) {
-					code.put(OpCode.dup);
-				} else if (op.kind == Operand.Kind.Elem) {
-					code.put(OpCode.dup2);
-				}
-
-				if (op.kind == Operand.Kind.Local) {
-					code.put(OpCode.inc);
-					code.put(op.adr);
-					code.put(255);
+				// duplicate
+				code.duplicate(op);
+				// increment
+				if (sym == pplus) {
+					code.inc(op, 1);
 				} else {
-					tempKind = op.kind; // we need to remember the type
-					code.load(op); // type is now stack
-					op.kind = tempKind; // reset type
-					code.load(new Operand(-1));
-					code.put(OpCode.add);
-					code.assign(op);
+					code.inc(op, -1);
 				}
+				scan(); // scans mminus or pplus
 				break;
 			default:
 				error(DESIGN_FOLLOW);
@@ -633,10 +592,10 @@ public final class ParserImpl extends Parser {
 			op = designator();
 			if (op.type == Tab.intType) {
 				code.put(OpCode.read);
-				code.assign(op);
+				code.store(op);
 			} else if (op.type == Tab.charType) {
 				code.put(OpCode.bread);
-				code.assign(op);
+				code.store(op);
 			} else {
 				error(READ_VALUE);
 			}
@@ -898,10 +857,7 @@ public final class ParserImpl extends Parser {
 		case ident:
 			op = designator();
 			if (sym == lpar) {
-				/*
-				 * if (op.kind != Operand.Kind.Meth) { error(NO_METH); // has to
-				 * be method! }
-				 */
+
 				if (op.obj.type == Tab.noType) {
 					error(INVALID_CALL); // we expected a return value !
 				}

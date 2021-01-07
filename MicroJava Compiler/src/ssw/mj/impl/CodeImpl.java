@@ -76,7 +76,7 @@ public final class CodeImpl extends Code {
 	 */
 	void assign(Operand x, Operand y) {
 		load(y);
-		assign(x); // call assign operation for single operand
+		store(x); // call assign operation for single operand
 	}
 
 	/**
@@ -84,7 +84,7 @@ public final class CodeImpl extends Code {
 	 * 
 	 * @param x
 	 */
-	void assign(Operand x) {
+	void store(Operand x) {
 		switch (x.kind) {
 		case Local:
 			switch (x.adr) {
@@ -123,6 +123,42 @@ public final class CodeImpl extends Code {
 			break;
 		default:
 			parser.error(Errors.Message.NO_VAR);
+		}
+	}
+
+	/**
+	 * Method which does the doplication depending on the operand
+	 * 
+	 * @param op
+	 */
+	public void duplicate(Operand op) {
+		if (op.kind == Operand.Kind.Fld) {
+			put(OpCode.dup);
+		} else if (op.kind == Operand.Kind.Elem) {
+			put(OpCode.dup2);
+		}
+	}
+
+	/**
+	 * Method wich handels the increment part
+	 * 
+	 * @param op
+	 * @param val
+	 *            - can be zero or one
+	 * 
+	 */
+	public void inc(Operand op, int val) {
+		if (op.kind == Operand.Kind.Local) {
+			put(OpCode.inc);
+			put(op.adr);
+			put(val);
+		} else {
+			Operand.Kind tempKind = op.kind; // we need to remember the type
+			load(op); // type is now stack
+			op.kind = tempKind; // reset type
+			load(new Operand(val));
+			put(OpCode.add);
+			store(op);
 		}
 	}
 
